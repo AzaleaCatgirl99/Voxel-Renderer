@@ -1,14 +1,16 @@
 #include "renderer/Renderer.h"
 
 #include "renderer/detail/VkRenderer.h"
+#include "util/Window.h"
 
-void Renderer::Create(Renderer* instance, eRenderPipeline pipeline) {
+void Renderer::Create(Renderer* instance, Window* window) {
     if (instance == nullptr) {
         instance = new Renderer();
 
-        switch (pipeline) {
+        switch (window->Pipeline()) {
         case RENDER_PIPELINE_VULKAN:
-            instance->m_context = new detail::VkRenderer();
+            instance->m_context = new detail::VkRenderer(window);
+            break;
         }
 
         instance->m_context->Initialize();

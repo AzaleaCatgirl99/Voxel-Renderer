@@ -4,14 +4,12 @@ namespace detail {
 class IRenderer;
 }
 
-enum eRenderPipeline {
-    RENDER_PIPELINE_VULKAN
-};
+class Window;
 
-// Main renderer class. Wraps various different implementations of the renderer based on the given pipeline.
+// Main renderer class. Wraps various different implementations of the renderer based on the given pipeline from the window.
 class Renderer final {
 public:
-    static void Create(Renderer* instance, eRenderPipeline pipeline = RENDER_PIPELINE_VULKAN);
+    static void Create(Renderer* instance, Window* window);
 
     void Destroy();
 private:

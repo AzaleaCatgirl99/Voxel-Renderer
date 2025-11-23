@@ -18,10 +18,14 @@ set(SRC ${CPP_FILES})
 add_executable(Voxel-Renderer ${SRC})
 include_directories(src)
 
+# SDL3 for windowing
+find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
+target_link_libraries(Voxel-Renderer PRIVATE SDL3::SDL3)
+
 # Vulkan pipeline
 find_package(Vulkan REQUIRED)
 target_link_libraries(Voxel-Renderer PRIVATE Vulkan::Vulkan)
 
-# SDL3 for windowing
-find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
-target_link_libraries(Voxel-Renderer PRIVATE SDL3::SDL3)
+# GLM for linear algebra
+add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
+target_link_libraries(Voxel-Renderer PRIVATE glm::glm-header-only)
