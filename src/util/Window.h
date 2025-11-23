@@ -5,6 +5,7 @@
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_main.h>
 #include "util/Constants.h"
+#include "util/Logger.h"
 
 class IRenderer;
 
@@ -97,4 +98,5 @@ private:
     SDL_Window* m_internal = nullptr;
     SDL_Event* m_event = nullptr;
     eRenderPipeline m_pipeline;
+    Logger m_logger = Logger("Window");
 };

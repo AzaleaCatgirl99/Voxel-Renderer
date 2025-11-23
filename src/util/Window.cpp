@@ -6,7 +6,8 @@ Window::Window(const char* title, const DisplayMode& mode, eRenderPipeline pipel
     m_pipeline = pipeline;
 
     // Initializes the the SDL3 video system, which is required for window management.
-	SDL_Init(SDL_INIT_VIDEO);
+	if (!SDL_Init(SDL_INIT_VIDEO))
+        throw m_logger.RuntimeError("Failed to initialize SDL Video.");
 
     // SDL flags for use in the window.
     SDL_WindowFlags flags;
@@ -36,6 +37,9 @@ Window::Window(const char* title, const DisplayMode& mode, eRenderPipeline pipel
 
     // Creates a resizable window. Aborts the app if failed.
 	m_internal = SDL_CreateWindow(title, mode.m_width, mode.m_height, flags);
+    if (!m_internal)
+        throw m_logger.RuntimeError("Failed to create internal window.");
 
-    SDL_SetWindowMinimumSize(m_internal, mode.m_minWidth, mode.m_minHeight);
+    if (!SDL_SetWindowMinimumSize(m_internal, mode.m_minWidth, mode.m_minHeight))
+        throw m_logger.RuntimeError("Failed to set the minimum size.");
 }
