@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
+#include <vulkan/vulkan.h>
 
 namespace detail {
 
@@ -13,6 +14,8 @@ public:
     virtual void Initialize() override;
 
     virtual void Destroy() override;
+private:
+    VkInstance m_instance;
 };
 
 }
