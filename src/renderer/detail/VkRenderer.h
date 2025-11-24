@@ -17,7 +17,7 @@ public:
 
     virtual void Destroy() override;
 private:
-    static const constexpr bool sEnableValidationLayers = true;
+    static constexpr const bool sEnableValidationLayers = true;
     static Logger sLogger;
     static std::vector<const char*> sValidationLayers;
 
