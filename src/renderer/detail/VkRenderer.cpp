@@ -8,11 +8,6 @@ namespace detail {
 // Craete the Logger for error catching.
 Logger VkRenderer::sLogger = Logger("VkRenderer");
 
-// Set what validation layers to enable.
-std::vector<const char*> VkRenderer::sValidationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
-
 void VkRenderer::Initialize() {
     // Create the Vulkan instance.
     CreateInstance();
@@ -53,7 +48,7 @@ void VkRenderer::CreateInstance() {
             throw sLogger.RuntimeError("Validation failed!", genericError);
         #endif
         default:
-            throw sLogger.RuntimeError("Uknown error code! Code: ", result, ",", genericError);
+            throw sLogger.RuntimeError("Uknown error code [", result, "]!", genericError);
     }
 }
 
@@ -61,28 +56,29 @@ VkInstanceCreateInfo VkRenderer::CreateInstanceInfo() {
     // Create the application info.
     VkApplicationInfo appInfo = CreateAppInfo();
 
+    // Get extension info.
+    std::vector<const char*> requiredExtensions = GetRequiredExtensions();
+
     // Create instance info struct.
     VkInstanceCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pApplicationInfo = &appInfo // Link the app info struct.
+        .pApplicationInfo = &appInfo, // Link the app info struct.
+        .enabledExtensionCount = (uint32_t) requiredExtensions.size(),
+        .ppEnabledExtensionNames = requiredExtensions.data(),
     };
 
-    // Add extension info to instance info.
-    std::vector<const char*> requiredExtensions = GetRequiredExtensions();
-    createInfo.enabledExtensionCount = (uint32_t) requiredExtensions.size();
-    createInfo.ppEnabledExtensionNames = requiredExtensions.data();
-
     // Set validation layers to enable.
-    // Start with ensuring the validation layers are available.
     if (sEnableValidationLayers && !CheckValidationLayerSupport()) {
         throw sLogger.RuntimeError("Not all of the requested validation layers are available!");
     }
 
     if (sEnableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(sValidationLayers.size());
-        createInfo.ppEnabledLayerNames = sValidationLayers.data();
+        createInfo.enabledLayerCount = static_cast<uint32_t>(std::size(sValidationLayers)),
+        createInfo.ppEnabledLayerNames = sValidationLayers;
+        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &CreateDebugMessengerInfo(); // Debug info.
     } else {
         createInfo.enabledLayerCount = 0; // Set to zero if validation layers are disabled.
+        createInfo.pNext = nullptr;
     }
 
     return createInfo;
@@ -159,13 +155,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
     VkDebugUtilsMessageTypeFlagsEXT pMessageType,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
-    
-    if (pMessageSeverity & sEnabledSeverityFlags == 0) {
-        return;
-    }
 
-    // This can be better written, make a 3 length static indexable array.
-    char* messageTypeStr;
+    // Identify the string prefix to use depending on the message type.
+    const char* messageTypeStr;
     switch (pMessageType) {
         case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
             messageTypeStr = "[GENERAL] ";
@@ -177,10 +169,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
             messageTypeStr = "[PERFORMANCE] ";
             break;
         default:
-            messageTypeStr = "[TYPE UNKNOWN] ";
+            sLogger.Warning("Receieved unexpected debugging message type [", pMessageType, "]");
+            messageTypeStr = "[UKNOWN TYPE] ";
             break;
     }
 
+    // Specify the type of log depending on the severity.
     switch (pMessageSeverity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
             sLogger.Verbose(messageTypeStr, pCallbackData->pMessage);
@@ -195,7 +189,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
             sLogger.Error(messageTypeStr, pCallbackData->pMessage);
             break;
         default:
-            sLogger.Error("[SEVERITY UNKNOWN]", messageTypeStr, pCallbackData->pMessage);
+            sLogger.Warning("Receieved unexpected debugging severity [", pMessageSeverity, "]");
+            sLogger.Error("[UNKNOWN SEVERITY] ", messageTypeStr, pCallbackData->pMessage); // Uknown severity, this shouldn't happen.
             break;
     }
 }
@@ -204,16 +199,7 @@ void VkRenderer::SetupDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
     // Create the info struct for the debug messenger.
-    VkDebugUtilsMessengerCreateInfoEXT createInfo{
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        .messageSeverity = sEnabledSeverityFlags,
-        .messageType = 
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-        .pfnUserCallback = VkRenderer::DebugCallback,
-        .pUserData = nullptr
-    };
+    VkDebugUtilsMessengerCreateInfoEXT createInfo = CreateDebugMessengerInfo();
 
     // Error codes at https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html.
     const char* genericError = " Failed to setup debug messenger.";
@@ -228,13 +214,28 @@ void VkRenderer::SetupDebugMessenger() {
             throw sLogger.RuntimeError("Failed to find extension!", genericError);
         case VK_ERROR_UNKNOWN:
             throw sLogger.RuntimeError("Unknown error!", genericError);
-        #ifndef SDL_PLATFORM_MACOS
+        #ifndef SDL_PLATFORM_MACOS // Error code doesn't exist on MacOS.
         case VK_ERROR_VALIDATION_FAILED:
             throw sLogger.RuntimeError("Validation failed!", genericError);
         #endif
         default:
-            throw sLogger.RuntimeError("Unknown error code!", genericError);
+            throw sLogger.RuntimeError("Unknown error code [", result, "]!", genericError);
     }
+}
+
+VkDebugUtilsMessengerCreateInfoEXT VkRenderer::CreateDebugMessengerInfo() {
+    // Create debug info struct for the debug messenger.
+    VkDebugUtilsMessengerCreateInfoEXT createInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = sEnabledSeverityFlags,
+        .messageType = 
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = DebugCallback,
+        .pUserData = nullptr
+    };
+    return createInfo;
 }
 
 VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
@@ -242,31 +243,40 @@ VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
     const VkAllocationCallbacks* pAllocator,
     VkDebugUtilsMessengerEXT* pDebugMessenger) {
 
+    // Loads the function with instance proc.
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
         vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT");
+
+    // Failed to load the function if it returns nullptr.
     if (func != nullptr) {
-        return func(m_instance, pCreateInfo, pAllocator, pDebugMessenger);
+        return func(m_instance, pCreateInfo, pAllocator, pDebugMessenger); // Run normally.
     } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
+        return VK_ERROR_EXTENSION_NOT_PRESENT; // Return error, extension not found.
     }
 }
 
 void VkRenderer::DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* pAllocator) {
+    // Loads the function with instance proc.
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
         vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT");
+
+    // Failed to load if it returns nullptr.
     if (func != nullptr) {
-        func(m_instance, m_debugMessenger, pAllocator);
+        func(m_instance, m_debugMessenger, pAllocator); // Run normally.
+    } else {
+        sLogger.Error("Unable to load vkDestroyDebugUtilsMessengerEXT! Failed to destroy debug messenger.");
     }
 }
 
 void VkRenderer::Destroy() {
+    // Destroy debug messenger first. Doesn't exist if validation layers disabled.
     if (sEnableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(nullptr);
     }
 
     vkDestroyInstance(m_instance, nullptr);
 
-    // TODO Destroy window
+    // TODO Destroy window.
 
     // TODO Terminate SDL. These are handled by the Renderer?
 }
