@@ -13,6 +13,18 @@ public:
         m_name = name;
     }
 
+    // Prints a generic log with a prefix or new line.
+    template<typename... Args>
+    constexpr void Print(const Args&... args) {
+        (std::cout << ... << args);
+    }
+
+    // Prints a generic log with a prefix.
+    template<typename... Args>
+    constexpr void Println(const Args&... args) {
+        (std::cout << ... << args) << std::endl;
+    }
+
     // Logs at a verbose level.
     template<typename... Args>
     constexpr void Verbose(const Args&... args) {

@@ -4,7 +4,7 @@ class Window;
 class Renderer;
 
 // App utility.
-class App {
+class App final {
 public:
     static void Run();
 
@@ -20,13 +20,13 @@ public:
         return sRenderer;
     }
 private:
+    static Window* sWindow;
+    static Renderer* sRenderer;
+    static bool sRunning;
+
     static void Init();
 
     static void MainLoop();
 
     static void Cleanup();
-
-    static Window* sWindow;
-    static Renderer* sRenderer;
-    static bool sRunning;
 };

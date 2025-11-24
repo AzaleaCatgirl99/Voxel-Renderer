@@ -17,6 +17,13 @@ void Renderer::Create(Renderer* instance, Window* window) {
     }
 }
 
-void Renderer::Destroy() {
-    m_context->Destroy();
+void Renderer::Destroy(Renderer* instance) {
+    if (instance) {
+        instance->m_context->Destroy();
+        delete instance;
+    }
+}
+
+Renderer::~Renderer() {
+    delete m_context;
 }

@@ -10,6 +10,18 @@ project(Voxel-Renderer
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 23)
 
+# Default settings for the program
+set(VOXEL_RENDERER_VERBOSE_LOG OFF)
+set(VOXEL_RENDERER_INFO_LOG OFF)
+set(VOXEL_RENDERER_WARNING_LOG ON)
+set(VOXEL_RENDERER_ERROR_LOG ON)
+set(VOXEL_FORCE_USE_DEBUG_SETTINGS OFF)
+
+# Custom config settings to enable
+if (EXISTS config/config.cmake)
+    include(config/config.cmake)
+endif ()
+
 # Source files
 file(GLOB_RECURSE CPP_FILES src/*.cpp)
 set(SRC ${CPP_FILES})
@@ -17,6 +29,27 @@ set(SRC ${CPP_FILES})
 # Main app executable
 add_executable(Voxel-Renderer ${SRC})
 include_directories(src)
+
+# Custom macros used
+if (VOXEL_RENDERER_VERBOSE_LOG)
+    add_compile_definitions(INTERNAL_VXL_RENDERER_VERBOSE_LOG=1)
+endif ()
+
+if (VOXEL_RENDERER_INFO_LOG)
+    add_compile_definitions(INTERNAL_VXL_RENDERER_INFO_LOG=1)
+endif ()
+
+if (VOXEL_RENDERER_WARNING_LOG)
+    add_compile_definitions(INTERNAL_VXL_RENDERER_WARNING_LOG=1)
+endif ()
+
+if (VOXEL_RENDERER_ERROR_LOG)
+    add_compile_definitions(INTERNAL_VXL_RENDERER_ERROR_LOG=1)
+endif ()
+
+if (VOXEL_FORCE_USE_DEBUG_SETTINGS)
+    add_compile_definitions(INTERNAL_VXL_FORCE_USE_DEBUG_SETTINGS=1)
+endif ()
 
 # SDL3 for windowing
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)

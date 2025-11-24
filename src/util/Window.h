@@ -85,18 +85,19 @@ public:
 
     // Gets the current SDL event.
     constexpr const SDL_Event* GetEvent() const noexcept {
-        return m_event;
+        return &m_event;
     }
 
     // Polls the current SDL event.
     constexpr bool PollEvent() {
-        return SDL_PollEvent(m_event);
+        return SDL_PollEvent(&m_event);
     }
 private:
     friend IRenderer;
 
+    static Logger sLogger;
+
     SDL_Window* m_internal = nullptr;
-    SDL_Event* m_event = nullptr;
+    SDL_Event m_event;
     eRenderPipeline m_pipeline;
-    Logger m_logger = Logger("Window");
 };

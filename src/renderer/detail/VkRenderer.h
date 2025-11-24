@@ -2,7 +2,8 @@
 
 #include "renderer/detail/IRenderer.h"
 #include <vulkan/vulkan.h>
-#include <util/Logger.h>
+#include "util/Features.h"
+#include "util/Logger.h"
 #include <vector>
 
 namespace detail {
@@ -18,50 +19,65 @@ public:
 
     // Destroys and cleans up Vulkan allocations.
     virtual void Destroy() override;
+
+    // Updates the Vulkan surface.
+    virtual void UpdateDisplay() override;
 private:
     // Determines whether to use validation layers depending on if NDEBUG (no debugging) flag is enabled.
-    #ifdef NDEBUG
-        static constexpr const bool sEnableValidationLayers = false;
-    #else
+#ifdef VXL_DEBUG
         static constexpr const bool sEnableValidationLayers = true;
-    #endif
+#else
+        static constexpr const bool sEnableValidationLayers = false;
+#endif
 
     // Set what severities to enable in the debug messenger.
-    static constexpr const uint32_t sEnabledSeverityFlags = 
-        // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-        // VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+    static constexpr const uint32_t sEnabledSeverityFlags =
+#if VXL_RENDERER_VERBOSE_LOG == VXL_TRUE
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+#endif
+#if VXL_RENDERER_INFO_LOG == VXL_TRUE
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+#endif
+#if VXL_RENDERER_WARNING_LOG == VXL_TRUE
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+#endif
+#if VXL_RENDERER_ERROR_LOG == VXL_TRUE
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+#endif
 
-    // Set what validation layers to enable.
-    static constexpr const char* sValidationLayers[] = {
-        "VK_LAYER_KHRONOS_validation"
-    };
+    // Sets what layers to enable.
+    static std::vector<const char*> sLayers;
+
+    // The required extensions needed for the renderer.
+    static std::vector<const char*> sRequiredExtensions;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;
 
-    // Creates the application info struct.
-    static VkApplicationInfo CreateAppInfo();
+    // The application info used by the renderer.
+    static VkApplicationInfo sAppInfo;
+
+    // The renderer's instance create info.
+    static VkInstanceCreateInfo sCreateInfo;
+
+    // The info used by the renderer's debug messenger.
+    static VkDebugUtilsMessengerCreateInfoEXT sDebugMessengerInfo;
 
     // Gets the required extensions for the Vulkan instance.
-    static std::vector<const char*> GetRequiredExtensions();
+    static void SetupRequiredExtensions();
 
-    // Creates the instance info struct.
-    static VkInstanceCreateInfo CreateInstanceInfo();
+    // sets up the instance info struct.
+    static void SetupInstanceInfo();
 
     // Checks if the validation layers are supported.
     static bool CheckValidationLayerSupport();
 
-    // Creates the debug info struct.
-    static VkDebugUtilsMessengerCreateInfoEXT CreateDebugMessengerInfo();
-
     // Debug callback function used when validation layers log information.
     static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT pMessageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT pMessageType,
-        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-        void* pUserData);
+        VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+        VkDebugUtilsMessageTypeFlagsEXT message_type,
+        const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+        void* user_data);
 
     // Creates the Vulkan instance.
     void CreateInstance();
@@ -71,15 +87,15 @@ private:
 
     // Loads and calls the extension function for creating the debug messenger.
     VkResult CreateDebugUtilsMessengerEXT(
-        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-        const VkAllocationCallbacks* pAllocator,
-        VkDebugUtilsMessengerEXT* pDebugMessenger);
+        const VkDebugUtilsMessengerCreateInfoEXT* create_info,
+        const VkAllocationCallbacks* allocator,
+        VkDebugUtilsMessengerEXT* debug_messenger);
 
     // Loads and calls the extension function for destroying the debug messenger.
-    void DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* pAllocator);
+    void DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* allocator);
 
-    VkInstance m_instance;
-    VkDebugUtilsMessengerEXT m_debugMessenger;
+    VkInstance m_instance = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
 };
 
 }

@@ -36,14 +36,14 @@ void App::MainLoop() {
     while (sWindow->PollEvent()) {
         switch (sWindow->GetEvent()->type) {
         case SDL_EVENT_QUIT:
-            sRunning = false;
+            Close();
             break;
         }
     }
 }
 
 void App::Cleanup() {
-    sRenderer->Destroy();
+    Renderer::Destroy(sRenderer);
     sWindow->Destroy();
 }
 

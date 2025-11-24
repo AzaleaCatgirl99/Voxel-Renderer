@@ -1,8 +1,6 @@
 #pragma once
 
-namespace detail {
-class IRenderer;
-}
+#include "renderer/detail/IRenderer.h"
 
 class Window;
 
@@ -11,9 +9,14 @@ class Renderer final {
 public:
     static void Create(Renderer* instance, Window* window);
 
-    void Destroy();
+    static void Destroy(Renderer* instance);
+
+    constexpr void UpdateDisplay() {
+        m_context->UpdateDisplay();
+    }
 private:
     Renderer() = default;
+    ~Renderer();
 
     detail::IRenderer* m_context = nullptr;
 };
