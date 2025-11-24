@@ -208,7 +208,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
             break;
         default:
             sLogger.Println("Receieved unexpected debugging severity [", message_severity, "]");
-            sLogger.Println("[UNKNOWN SEVERITY] ", messageTypeStr, callback_data->pMessage); // Uknown severity, this shouldn't happen.
+            sLogger.Println("[UNKNOWN SEVERITY] ", messageTypeStr, callback_data->pMessage); // Unknown severity, this shouldn't happen.
             break;
     }
 }
@@ -217,24 +217,24 @@ void VkRenderer::SetupDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
     // Error codes at https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html.
-    const char* genericError = " Failed to setup debug messenger.";
+    const char* genericError = " Failed to setup debug messenger. ";
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
     switch (result) {
         case VK_SUCCESS:
             sLogger.Info("Successfully created the debug messenger.");
             break;
         case VK_ERROR_OUT_OF_HOST_MEMORY:
-            throw sLogger.RuntimeError("Ran out of host memory!", genericError);
+            throw sLogger.RuntimeError(genericError, "Ran out of host memory!");
         case VK_ERROR_EXTENSION_NOT_PRESENT:
-            throw sLogger.RuntimeError("Failed to find extension!", genericError);
+            throw sLogger.RuntimeError(genericError, "Failed to find extension!");
         case VK_ERROR_UNKNOWN:
-            throw sLogger.RuntimeError("Unknown error!", genericError);
+            throw sLogger.RuntimeError(genericError, "Unknown error!");
         #ifndef SDL_PLATFORM_MACOS // Error code doesn't exist on MacOS.
         case VK_ERROR_VALIDATION_FAILED:
-            throw sLogger.RuntimeError("Validation failed!", genericError);
+            throw sLogger.RuntimeError(genericError, "Validation failed!");
         #endif
         default:
-            throw sLogger.RuntimeError("Unknown error code [", result, "]!", genericError);
+            throw sLogger.RuntimeError(genericError, "Unknown error code [", result, "]!");
     }
 }
 
