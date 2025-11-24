@@ -17,6 +17,10 @@ public:
 
     virtual void Destroy() override;
 private:
+    static const constexpr bool sEnableValidationLayers = true;
+    static Logger sLogger;
+    static std::vector<const char*> sValidationLayers;
+
     VkApplicationInfo CreateAppInfo();
 
     VkInstanceCreateInfo CreateInstanceInfo();
@@ -24,10 +28,6 @@ private:
     bool CheckValidationLayerSupport();
 
     VkInstance m_instance;
-
-    static Logger sLogger;
-    static bool sEnableValidationLayers;
-    static std::vector<const char*> sValidationLayers;
 };
 
 }

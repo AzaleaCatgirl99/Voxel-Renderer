@@ -10,13 +10,6 @@ namespace detail {
 // Craete the Logger for error catching.
 Logger VkRenderer::sLogger = Logger("VkRenderer");
 
-// Set whether or not to enable validation layers.
-#ifdef DEBUG
-    bool VkRenderer::sEnableValidationLayers = true;
-#else
-    bool VkRenderer::sEnableValidationLayers = false;
-#endif
-
 // Set what validation layers to enable.
 std::vector<const char*> VkRenderer::sValidationLayers = {
     "VK_LAYER_KHRONOS_validation"
