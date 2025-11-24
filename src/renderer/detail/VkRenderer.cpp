@@ -35,23 +35,25 @@ void VkRenderer::Initialize() {
         case VK_SUCCESS:
             return; // Ran successfully.
         case VK_ERROR_EXTENSION_NOT_PRESENT: // TODO: Add optional extension functionality.
-            sLogger.RuntimeError("Extension not present!", genericError);
+            throw sLogger.RuntimeError("Extension not present!", genericError);
         case VK_ERROR_INCOMPATIBLE_DRIVER:
-            sLogger.RuntimeError("Driver is not compatible!", genericError);
+            throw sLogger.RuntimeError("Driver is not compatible!", genericError);
         case VK_ERROR_INITIALIZATION_FAILED:
-            sLogger.RuntimeError("Initialization failed on Vulkan instance creation!", genericError);
+            throw sLogger.RuntimeError("Initialization failed on Vulkan instance creation!", genericError);
         case VK_ERROR_LAYER_NOT_PRESENT:
-            sLogger.RuntimeError("Layer not present!", genericError);
+            throw sLogger.RuntimeError("Layer not present!", genericError);
         case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            sLogger.RuntimeError("Ran out of device memory!", genericError);
+            throw sLogger.RuntimeError("Ran out of device memory!", genericError);
         case VK_ERROR_OUT_OF_HOST_MEMORY:
-            sLogger.RuntimeError("Ran out of host memory!", genericError);
-        case VK_ERROR_VALIDATION_FAILED:
-            sLogger.RuntimeError("Validation failed!", genericError);
+            throw sLogger.RuntimeError("Ran out of host memory!", genericError);
         case VK_ERROR_UNKNOWN:
-            sLogger.RuntimeError("Unknown error occurred!", genericError);
+            throw sLogger.RuntimeError("Unknown error occurred!", genericError);
+        #ifndef SDL_PLATFORM_MACOS
+        case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on Macos
+            throw sLogger.RuntimeError("Validation failed!", genericError);
+        #endif
         default:
-            sLogger.RuntimeError("Uknown error code! Code: ", result, ",", genericError);
+            throw sLogger.RuntimeError("Uknown error code! Code: ", result, ",", genericError);
     }
 }
 
@@ -88,7 +90,7 @@ VkInstanceCreateInfo VkRenderer::CreateInstanceInfo() {
     // Set validation layers to enable.
     // Start with ensuring the validation layers are available.
     if (sEnableValidationLayers && !CheckValidationLayerSupport()) {
-        sLogger.Error("Not all of the requested validation layers are available!");
+        throw sLogger.RuntimeError("Not all of the requested validation layers are available!");
     }
 
     if (sEnableValidationLayers) {
