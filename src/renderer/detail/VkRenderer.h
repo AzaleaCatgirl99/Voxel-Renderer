@@ -2,6 +2,8 @@
 
 #include "renderer/detail/IRenderer.h"
 #include <vulkan/vulkan.h>
+#include <util/Logger.h>
+#include <vector>
 
 namespace detail {
 
@@ -15,7 +17,17 @@ public:
 
     virtual void Destroy() override;
 private:
+    VkApplicationInfo CreateAppInfo();
+
+    VkInstanceCreateInfo CreateInstanceInfo();
+
+    bool CheckValidationLayerSupport();
+
     VkInstance m_instance;
+
+    static Logger sLogger;
+    static bool sEnableValidationLayers;
+    static std::vector<const char*> sValidationLayers;
 };
 
 }
