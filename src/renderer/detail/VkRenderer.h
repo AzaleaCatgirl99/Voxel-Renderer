@@ -34,7 +34,7 @@ private:
 #endif
 
     // Set what severities to enable in the debug messenger.
-    static constexpr const uint32_t sEnabledSeverityFlags =
+    static constexpr const uint32_t sEnabledSeverityFlags = 0 |
 #if VXL_RENDERER_VERBOSE_LOG == VXL_TRUE
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 #endif
@@ -45,8 +45,9 @@ private:
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 #endif
 #if VXL_RENDERER_ERROR_LOG == VXL_TRUE
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
 #endif
+    0;
 
     // Sets what layers to enable.
     static std::vector<const char*> sLayers;
@@ -88,7 +89,7 @@ private:
     // Gets the score of the given physical device.
     static size_t GetPhysicalDeviceScore(VkPhysicalDevice device);
 
-     // Struct for storing queue family indices
+    // Struct for storing queue family indices
     struct QueueFamilyIndices {
         std::optional<uint32_t> m_graphics;
 
@@ -106,8 +107,11 @@ private:
     // Creates the debug messenger.
     void SetupDebugMessenger();
 
-    // Seletcs the best physical device (AKA GPU) that can use be used in renderer.
+    // Selects the best physical device (AKA GPU) that can use be used in renderer.
     void SelectBestPhysicalDevice();
+
+    // Creates the logical device and assigns the graphics queue handle.
+    void CreateLogicalDevice();
 
     // Loads and calls the extension function for creating the debug messenger.
     VkResult CreateDebugUtilsMessengerEXT(
@@ -121,6 +125,8 @@ private:
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
+    VkDevice m_logicalDevice = VK_NULL_HANDLE;
+    VkQueue m_graphicsQueue = VK_NULL_HANDLE;
 };
 
 }
