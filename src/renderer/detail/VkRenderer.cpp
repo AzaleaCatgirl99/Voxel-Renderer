@@ -79,7 +79,9 @@ void VkRenderer::CreateInstance() {
 
     // Create the Vulkan instance.
     VkResult result = vkCreateInstance(&sCreateInfo, VK_NULL_HANDLE, &m_instance);
-    sLogger.InterpretVkResult(result, "Successfully created the Vulkan instance.", "Failed to create the Vulkan instance.");
+    if (result != VK_SUCCESS)
+        throw InterpretVkError(result, "Failed to create Vulkan instance.");
+    sLogger.Info("Created the Vulkan instance.");
 }
 
 void VkRenderer::SetupInstanceInfo() {
@@ -202,7 +204,9 @@ void VkRenderer::SetupDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
-    sLogger.InterpretVkResult(result, "Successfully created the debug messenger!", "Failed to create the debug messenger.");
+    if (result != VK_SUCCESS)
+        throw InterpretVkError(result, "Failed to create the debug messenger.");
+    sLogger.Info("Created the debug messenger.");
 }
 
 VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
@@ -350,10 +354,48 @@ void VkRenderer::CreateLogicalDevice() {
 
     // Create the logical device.
     VkResult result = vkCreateDevice(m_physicalDevice, &logicalDeviceCreateInfo, VK_NULL_HANDLE, &m_logicalDevice);
-    sLogger.InterpretVkResult(result, "Successfully created the logical device!", "Failed to create the logical device.");
+    if (result != VK_SUCCESS)
+        throw InterpretVkError(result, "Failed to create the logical device.");
+    sLogger.Info("Created the logical device.");
 
     // Get the graphics queue handle.
     vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
+}
+
+
+std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* genericError) {
+    // Supports:
+    // Instance - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateInstance.html
+    // Debug messenger - https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html
+    // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
+    switch(result) {
+        case VK_ERROR_EXTENSION_NOT_PRESENT:
+            return sLogger.RuntimeError("Extension not present! ", genericError);
+        case VK_ERROR_INCOMPATIBLE_DRIVER:
+            return sLogger.RuntimeError("Driver is not compatible! ", genericError);
+        case VK_ERROR_INITIALIZATION_FAILED:
+            return sLogger.RuntimeError("Initialization failed! ", genericError);
+        case VK_ERROR_LAYER_NOT_PRESENT:
+            return sLogger.RuntimeError("Validation layer is not present! ", genericError);
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            return sLogger.RuntimeError("Ran out of device memory! ", genericError);
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            return sLogger.RuntimeError("Ran out of host memory! ", genericError);
+        case VK_ERROR_DEVICE_LOST:
+            return sLogger.RuntimeError("Device lost! ", genericError);
+        case VK_ERROR_FEATURE_NOT_PRESENT:
+            return sLogger.RuntimeError("Feature not present! ", genericError);
+        case VK_ERROR_TOO_MANY_OBJECTS:
+            return sLogger.RuntimeError("Too many objects! ", genericError);
+        case VK_ERROR_UNKNOWN:
+            return sLogger.RuntimeError("Unknown error occurred! ", genericError);
+        #ifndef SDL_PLATFORM_MACOS
+        case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
+            return sLogger.RuntimeError("Validation failed! ", genericError);
+        #endif
+        default:
+            return sLogger.RuntimeError("Uknown error code [", result, "]! ", genericError);
+    }
 }
 
 }
