@@ -52,10 +52,14 @@ void VkRenderer::Initialize() {
 
     // Selects the best GPU to use.
     SelectBestPhysicalDevice();
+
+    // Create the logical device.
+    CreateLogicalDevice();
 }
 
 void VkRenderer::Destroy() {
-    // Destroy debug messenger first. Doesn't exist if validation layers disabled.
+    vkDestroyDevice(m_logicalDevice, nullptr);
+
     if (sEnableValidationLayers)
         DestroyDebugUtilsMessengerEXT(VK_NULL_HANDLE);
 
@@ -75,34 +79,7 @@ void VkRenderer::CreateInstance() {
 
     // Create the Vulkan instance.
     VkResult result = vkCreateInstance(&sCreateInfo, VK_NULL_HANDLE, &m_instance);
-
-    // Catch any errors. Error codes at https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateInstance.html.
-    const char* genericError = "Failed to create Vulkan instance. ";
-    switch (result) {
-        case VK_SUCCESS:
-            sLogger.Info("Successfully created the Vulkan instance.");
-            break; // Ran successfully.
-        case VK_ERROR_EXTENSION_NOT_PRESENT: // TODO: Add optional extension functionality.
-            throw sLogger.RuntimeError(genericError, "Extension not present!");
-        case VK_ERROR_INCOMPATIBLE_DRIVER:
-            throw sLogger.RuntimeError(genericError, "Driver is not compatible!");
-        case VK_ERROR_INITIALIZATION_FAILED:
-            throw sLogger.RuntimeError(genericError, "Initialization failed on Vulkan instance creation!");
-        case VK_ERROR_LAYER_NOT_PRESENT:
-            throw sLogger.RuntimeError(genericError, "Layer not present!");
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            throw sLogger.RuntimeError(genericError, "Ran out of device memory!");
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-            throw sLogger.RuntimeError(genericError, "Ran out of host memory!");
-        case VK_ERROR_UNKNOWN:
-            throw sLogger.RuntimeError(genericError, "Unknown error occurred!");
-        #ifndef SDL_PLATFORM_MACOS
-        case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
-            throw sLogger.RuntimeError(genericError, "Validation failed!");
-        #endif
-        default:
-            throw sLogger.RuntimeError(genericError, "Uknown error code [", result, "]!");
-    }
+    sLogger.InterpretVkResult(result, "Successfully created the Vulkan instance.", "Failed to create the Vulkan instance.");
 }
 
 void VkRenderer::SetupInstanceInfo() {
@@ -110,7 +87,9 @@ void VkRenderer::SetupInstanceInfo() {
     sCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = VK_NULL_HANDLE,
-        .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+#ifdef SDL_PLATFORM_MACOS
+        .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR, // macOS support flag
+#endif
         .pApplicationInfo = &sAppInfo, // Link the app info struct.
         .enabledLayerCount = static_cast<uint32_t>(sLayers.size()),
         .ppEnabledLayerNames = sLayers.data(),
@@ -184,17 +163,17 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
     const char* messageTypeStr;
     switch (message_type) {
         case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
-            messageTypeStr = "[GENERAL] ";
+            messageTypeStr = "[VkDebug/GENERAL] ";
             break;
         case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT:
-            messageTypeStr = "[VALIDATION] ";
+            messageTypeStr = "[VkDebug/VALIDATION] ";
             break;
         case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT:
-            messageTypeStr = "[PERFORMANCE] ";
+            messageTypeStr = "[VkDebug/PERFORMANCE] ";
             break;
         default:
             sLogger.Println("Receieved unexpected debugging message type [", message_type, "]");
-            messageTypeStr = "[UNKNOWN TYPE] ";
+            messageTypeStr = "[VkDebug/UNKNOWN] ";
             break;
     }
 
@@ -202,46 +181,28 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
     switch (message_severity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
             sLogger.Println(messageTypeStr, callback_data->pMessage);
-            break;
+            return VK_FALSE;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
             sLogger.Println(messageTypeStr, callback_data->pMessage);
-            break;
+            return VK_FALSE;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
             sLogger.Println(messageTypeStr, callback_data->pMessage);
-            break;
+            return VK_FALSE;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
             sLogger.Println(messageTypeStr, callback_data->pMessage);
-            break;
+            return VK_TRUE;
         default:
             sLogger.Println("Receieved unexpected debugging severity [", message_severity, "]");
             sLogger.Println("[UNKNOWN SEVERITY] ", messageTypeStr, callback_data->pMessage); // Unknown severity, this shouldn't happen.
-            break;
+            return VK_FALSE;
     }
 }
 
 void VkRenderer::SetupDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
-    // Error codes at https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html.
-    const char* genericError = " Failed to setup debug messenger. ";
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
-    switch (result) {
-        case VK_SUCCESS:
-            sLogger.Info("Successfully created the debug messenger.");
-            break;
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-            throw sLogger.RuntimeError(genericError, "Ran out of host memory!");
-        case VK_ERROR_EXTENSION_NOT_PRESENT:
-            throw sLogger.RuntimeError(genericError, "Failed to find extension!");
-        case VK_ERROR_UNKNOWN:
-            throw sLogger.RuntimeError(genericError, "Unknown error!");
-        #ifndef SDL_PLATFORM_MACOS // Error code doesn't exist on MacOS.
-        case VK_ERROR_VALIDATION_FAILED:
-            throw sLogger.RuntimeError(genericError, "Validation failed!");
-        #endif
-        default:
-            throw sLogger.RuntimeError(genericError, "Unknown error code [", result, "]!");
-    }
+    sLogger.InterpretVkResult(result, "Successfully created the debug messenger!", "Failed to create the debug messenger.");
 }
 
 VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
@@ -348,6 +309,51 @@ VkRenderer::QueueFamilyIndices VkRenderer::GetQueueFamilies(VkPhysicalDevice dev
     }
 
     return indices;
+}
+
+void VkRenderer::CreateLogicalDevice() {
+    // Find the indices of the queue families.
+    QueueFamilyIndices indices = GetQueueFamilies(m_physicalDevice);
+
+    // Ensure graphics is not empty.
+    if (!indices.m_graphics.has_value())
+        throw sLogger.RuntimeError("No graphics family found! Failed to create the logical device.");
+
+    // Create the graphics queue info struct.
+    float queuePriority = 1.0f;
+    VkDeviceQueueCreateInfo graphicsQueueCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = indices.m_graphics.value(),
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority
+    };
+
+    // Create a blank device features since we do not need any special support.
+    VkPhysicalDeviceFeatures deviceFeatures{};
+
+    // Create the info struct for the logical device.
+    VkDeviceCreateInfo logicalDeviceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &graphicsQueueCreateInfo, // Link the graphics queue.
+        .enabledExtensionCount = 0,
+        .pEnabledFeatures = &deviceFeatures // Link the device features.
+    };
+
+    // Enable device-specific validation layer support for older implementations.
+    if (sEnableValidationLayers) {
+        logicalDeviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(sLayers.size());
+        logicalDeviceCreateInfo.ppEnabledLayerNames = sLayers.data();
+    } else {
+        logicalDeviceCreateInfo.enabledLayerCount = 0;
+    }
+
+    // Create the logical device.
+    VkResult result = vkCreateDevice(m_physicalDevice, &logicalDeviceCreateInfo, VK_NULL_HANDLE, &m_logicalDevice);
+    sLogger.InterpretVkResult(result, "Successfully created the logical device!", "Failed to create the logical device.");
+
+    // Get the graphics queue handle.
+    vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
 }
 
 }
