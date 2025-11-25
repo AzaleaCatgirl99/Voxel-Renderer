@@ -1,6 +1,9 @@
 #include "renderer/detail/VkRenderer.h"
 
 #include <SDL3/SDL_vulkan.h>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 
 namespace detail {
 
@@ -25,6 +28,9 @@ VkApplicationInfo VkRenderer::sAppInfo = {
     .apiVersion = VK_API_VERSION_1_0
 };
 
+// The renderer's instance create info.
+VkInstanceCreateInfo VkRenderer::sCreateInfo;
+
 // The info used by the renderer's debug messenger.
 VkDebugUtilsMessengerCreateInfoEXT VkRenderer::sDebugMessengerInfo = {
     .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -37,15 +43,15 @@ VkDebugUtilsMessengerCreateInfoEXT VkRenderer::sDebugMessengerInfo = {
     .pUserData = VK_NULL_HANDLE
 };
 
-// The renderer's instance create info.
-VkInstanceCreateInfo VkRenderer::sCreateInfo;
-
 void VkRenderer::Initialize() {
     // Create the Vulkan instance.
     CreateInstance();
 
     // Set up the debug messenger for catching info from the validation layers.
     SetupDebugMessenger();
+
+    // Selects the best GPU to use.
+    SelectBestPhysicalDevice();
 }
 
 void VkRenderer::Destroy() {
@@ -264,6 +270,84 @@ void VkRenderer::DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* allo
         func(m_instance, m_debugMessenger, allocator); // Run normally.
     else
         sLogger.Error("Unable to load vkDestroyDebugUtilsMessengerEXT! Failed to destroy debug messenger.");
+}
+
+void VkRenderer::SelectBestPhysicalDevice() {
+    // Gets the amount of GPUs on the system that support Vulkan.
+    uint32_t count = 0;
+    vkEnumeratePhysicalDevices(m_instance, &count, VK_NULL_HANDLE);
+
+    // Throws a runtime error if no GPUs with Vulkan support exist.
+    if (count == 0)
+        throw sLogger.RuntimeError("Failed to find a GPU with Vulkan support!");
+
+    // Gets the device handlers.
+    VkPhysicalDevice devices[count];
+    vkEnumeratePhysicalDevices(m_instance, &count, devices);
+
+    size_t currentBestScore = 0;
+    size_t currentBestDeviceIndex = 0;
+    // Goes through each device and checks whether it is the best one to use.
+    for (size_t i = 0; i < count; i++) {
+        size_t score = GetPhysicalDeviceScore(devices[i]);
+        if (IsPhysicalDeviceUsable(devices[i]) && score > currentBestScore) {
+            currentBestScore = score;
+            currentBestDeviceIndex = i;
+        }
+    }
+
+    m_physicalDevice = devices[currentBestDeviceIndex];
+}
+
+bool VkRenderer::IsPhysicalDeviceUsable(VkPhysicalDevice device) {
+    QueueFamilyIndices indices = GetQueueFamilies(device);
+
+    return indices.HasEverything();
+}
+
+size_t VkRenderer::GetPhysicalDeviceScore(VkPhysicalDevice device) {
+    size_t score = 0;
+
+    // Gets the device's properties.
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(device, &properties);
+
+    // Gets the device's features.
+    VkPhysicalDeviceFeatures features;
+    vkGetPhysicalDeviceFeatures(device, &features);
+
+    // If the GPU is discrete, the score will be added by 1000.
+    if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+        score += 1000;
+
+    // Score is mostly determined by the maximum 2D image dimensions.
+    score += properties.limits.maxImageDimension2D;
+
+    return score;
+}
+
+VkRenderer::QueueFamilyIndices VkRenderer::GetQueueFamilies(VkPhysicalDevice device) {
+    QueueFamilyIndices indices;
+
+    // Gets the amount of queue families on the device.
+    uint32_t count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, VK_NULL_HANDLE);
+
+    // Gets the queue families on the device.
+    VkQueueFamilyProperties families[count];
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, families);
+
+    // Goes through all of the flags and finds the indices for them.
+    for (uint32_t i = 0; i < count; i++) {
+        if (families[count].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            indices.m_graphics = i;
+
+        // Breaks if everything has already been added to the indices.
+        if (indices.HasEverything())
+            break;
+    }
+
+    return indices;
 }
 
 }

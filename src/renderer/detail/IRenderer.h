@@ -12,9 +12,7 @@ public:
     }
 
     virtual void Initialize() = 0;
-
     virtual void Destroy() = 0;
-
     virtual void UpdateDisplay() = 0;
 
     virtual ~IRenderer() {

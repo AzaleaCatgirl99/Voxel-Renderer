@@ -1,6 +1,9 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <vulkan/vulkan.h>
 #include "util/Features.h"
 #include "util/Logger.h"
@@ -79,11 +82,32 @@ private:
         const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
         void* user_data);
 
+    // Checks whether a specific physical device is usable for the renderer.
+    static bool IsPhysicalDeviceUsable(VkPhysicalDevice device);
+
+    // Gets the score of the given physical device.
+    static size_t GetPhysicalDeviceScore(VkPhysicalDevice device);
+
+     // Struct for storing queue family indices
+    struct QueueFamilyIndices {
+        std::optional<uint32_t> m_graphics;
+
+        constexpr bool HasEverything() const noexcept {
+            return m_graphics.has_value();
+        }
+    };
+
+    // Gets the queue families for a specific physical device.
+    static QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
+
     // Creates the Vulkan instance.
     void CreateInstance();
 
     // Creates the debug messenger.
     void SetupDebugMessenger();
+
+    // Seletcs the best physical device (AKA GPU) that can use be used in renderer.
+    void SelectBestPhysicalDevice();
 
     // Loads and calls the extension function for creating the debug messenger.
     VkResult CreateDebugUtilsMessengerEXT(
@@ -96,6 +120,7 @@ private:
 
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
+    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
 };
 
 }
