@@ -304,7 +304,7 @@ VkRenderer::QueueFamilyIndices VkRenderer::GetQueueFamilies(VkPhysicalDevice dev
 
     // Goes through all of the flags and finds the indices for them.
     for (uint32_t i = 0; i < count; i++) {
-        if (families[count].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.m_graphics = i;
 
         // Breaks if everything has already been added to the indices.
@@ -390,8 +390,10 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
             return sLogger.RuntimeError("Unknown error occurred! ", genericError);
         #ifndef SDL_PLATFORM_MACOS
         case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
-            return sLogger.RuntimeError("Validation failed! ", genericError);
+        #else
+        case VK_ERROR_VALIDATION_FAILED_EXT: // Use the EXT version for macOS
         #endif
+            return sLogger.RuntimeError("Validation failed! ", genericError);
         default:
             return sLogger.RuntimeError("Uknown error code [", result, "]! ", genericError);
     }
