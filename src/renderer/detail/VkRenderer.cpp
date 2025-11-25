@@ -362,7 +362,6 @@ void VkRenderer::CreateLogicalDevice() {
     vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
 }
 
-
 std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* genericError) {
     // Supports:
     // Instance - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateInstance.html
