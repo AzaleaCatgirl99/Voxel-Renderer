@@ -4,7 +4,6 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
-#include <vulkan/vulkan.h>
 
 // Logger utility for better handling logging. Uses a name for the specific caller.
 class Logger final {
@@ -61,45 +60,6 @@ public:
     constexpr std::runtime_error RuntimeError(const Args&... args) {
         return std::runtime_error(GetStr<Args...>(args..., "RUNTIME_ERROR"));
     }
-
-    // Supports:
-    // Instance - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateInstance.html
-    // Debug messenger - https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html
-    // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
-    template<typename... Args>
-    constexpr void InterpretVkResult(VkResult my_result, const char* my_successStr, const char* my_genericErrorStr) {
-        switch(my_result) {
-            case VK_SUCCESS:
-                Info(my_successStr);
-                break;
-            case VK_ERROR_EXTENSION_NOT_PRESENT:
-                throw RuntimeError("Extension not present! ", my_genericErrorStr);
-            case VK_ERROR_INCOMPATIBLE_DRIVER:
-                throw RuntimeError("Driver is not compatible! ", my_genericErrorStr);
-            case VK_ERROR_INITIALIZATION_FAILED:
-                throw RuntimeError("Initialization failed! ", my_genericErrorStr);
-            case VK_ERROR_LAYER_NOT_PRESENT:
-                throw RuntimeError("Validation layer is not present! ", my_genericErrorStr);
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                throw RuntimeError("Ran out of device memory! ", my_genericErrorStr);
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                throw RuntimeError("Ran out of host memory! ", my_genericErrorStr);
-            case VK_ERROR_DEVICE_LOST:
-                throw RuntimeError("Device lost! ", my_genericErrorStr);
-            case VK_ERROR_FEATURE_NOT_PRESENT:
-                throw RuntimeError("Feature not present! ", my_genericErrorStr);
-            case VK_ERROR_TOO_MANY_OBJECTS:
-                throw RuntimeError("Too many objects! ", my_genericErrorStr);
-            case VK_ERROR_UNKNOWN:
-                throw RuntimeError("Unknown error occurred! ", my_genericErrorStr);
-            #ifndef SDL_PLATFORM_MACOS
-            case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
-                throw RuntimeError("Validation failed! ", my_genericErrorStr);
-            #endif
-            default:
-                throw RuntimeError("Uknown error code [", my_result, "]! ", my_genericErrorStr);
-        }
-    };
 private:
     // Internal log function.
     template<typename... Args>

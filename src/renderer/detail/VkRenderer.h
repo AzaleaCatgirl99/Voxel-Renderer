@@ -76,6 +76,9 @@ private:
     // Checks if the validation layers are supported.
     static bool CheckValidationLayerSupport();
 
+    // Interprets a VkResult error.
+    static std::runtime_error InterpretVkError(VkResult result, const char* error);
+
     // Debug callback function used when validation layers log information.
     static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
