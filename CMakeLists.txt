@@ -6,6 +6,8 @@ project(Voxel-Renderer
         LANGUAGES CXX
 )
 
+# ========== Configuration ==========
+
 # Setting languages
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 23)
@@ -21,14 +23,6 @@ set(VOXEL_FORCE_USE_DEBUG_SETTINGS OFF)
 if (EXISTS config/config.cmake)
     include(config/config.cmake)
 endif ()
-
-# Source files
-file(GLOB_RECURSE CPP_FILES src/*.cpp)
-set(SRC ${CPP_FILES})
-
-# Main app executable
-add_executable(Voxel-Renderer ${SRC})
-include_directories(src)
 
 # Custom macros used
 if (VOXEL_RENDERER_VERBOSE_LOG)
@@ -50,6 +44,31 @@ endif ()
 if (VOXEL_FORCE_USE_DEBUG_SETTINGS)
     add_compile_definitions(INTERNAL_VXL_FORCE_USE_DEBUG_SETTINGS=1)
 endif ()
+
+# ========== Source Files & Executable ==========
+
+# Main app source
+file(GLOB_RECURSE CPP_FILES src/*.cpp)
+set(SRC ${CPP_FILES})
+
+# ImGUI for UI handling (this doesn't have a CMake config, so we have to add our own config)
+set(IMGUI_SRC
+    # Main required files
+    lib/imgui/imgui.cpp
+    lib/imgui/imgui_draw.cpp
+    lib/imgui/imgui_tables.cpp
+    lib/imgui/imgui_widgets.cpp
+    # Backend files
+    lib/imgui/backends/imgui_impl_sdl3.cpp
+    lib/imgui/backends/imgui_impl_vulkan.cpp
+)
+
+# Main app executable
+add_executable(Voxel-Renderer ${SRC} ${IMGUI_SRC})
+include_directories(src)
+include_directories(lib/imgui)
+
+# ========== Libraries ==========
 
 # SDL3 for windowing
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
