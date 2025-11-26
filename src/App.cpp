@@ -5,7 +5,6 @@
 #include <iostream>
 
 Window* App::sWindow = nullptr;
-Renderer* App::sRenderer = nullptr;
 bool App::sRunning = true;
 
 void App::Run() {
@@ -29,7 +28,9 @@ void App::Init() {
 
     sWindow = new Window("Voxel Renderer", mode, RENDER_PIPELINE_VULKAN);
 
-    Renderer::Create(sRenderer, sWindow);
+    Renderer::Settings rendererSettings;
+
+    Renderer::CreateContext(sWindow, rendererSettings);
 }
 
 void App::MainLoop() {
@@ -43,7 +44,7 @@ void App::MainLoop() {
 }
 
 void App::Cleanup() {
-    Renderer::Destroy(sRenderer);
+    Renderer::DestroyContext();
     sWindow->Destroy();
 }
 

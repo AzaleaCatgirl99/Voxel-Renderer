@@ -1,6 +1,7 @@
 #pragma once
 
-#include <string>
+#include "util/Constants.h"
+
 class Window;
 
 namespace detail {
@@ -8,8 +9,13 @@ namespace detail {
 // Internal base virtual renderer.
 class IRenderer {
 public:
-    constexpr IRenderer(Window* window) noexcept {
+    struct Properties {
+        eRenderSwapInterval m_swapInterval;
+    };
+
+    constexpr IRenderer(Window* window, const Properties& properties) noexcept {
         m_window = window;
+        m_properties = properties;
     }
 
     virtual void Initialize() = 0;
@@ -20,6 +26,7 @@ public:
     }
 protected:
     Window* m_window = nullptr;
+    Properties m_properties;
 };
 
 }

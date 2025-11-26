@@ -1,22 +1,31 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
+#include "util/Constants.h"
+#include <cassert>
 
 class Window;
 
 // Main renderer class. Wraps various different implementations of the renderer based on the given pipeline from the window.
 class Renderer final {
 public:
-    static void Create(Renderer* instance, Window* window);
+    // Various settings for the renderer.
+    struct Settings {
+        eRenderSwapInterval m_defaultSwapInterval = RENDER_SWAP_INTERVAL_IMMEDIATE;
+    };
 
-    static void Destroy(Renderer* instance);
+    // Creates the renderer context.
+    static void CreateContext(Window* window, const Settings& settings);
 
-    constexpr void UpdateDisplay() {
-        m_context->UpdateDisplay();
+    // Destroys the renderer context.
+    static void DestroyContext();
+
+    // Updates the display.
+    static constexpr void UpdateDisplay() {
+        assert(sContext != nullptr);
+
+        sContext->UpdateDisplay();
     }
 private:
-    Renderer() = default;
-    ~Renderer();
-
-    detail::IRenderer* m_context = nullptr;
+    static detail::IRenderer* sContext;
 };

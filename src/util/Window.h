@@ -65,6 +65,7 @@ public:
         return width / height;
     }
 
+    // Gets the render pipeline for the window.
     constexpr const eRenderPipeline& Pipeline() const noexcept {
         return m_ePipeline;
     }

@@ -1,14 +1,13 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
-#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <flat_map>
 #include <optional>
-#include <string>
 #include <vulkan/vulkan.h>
+#include "util/Constants.h"
 #include "util/Features.h"
 #include "util/Logger.h"
 #include <vector>
@@ -18,7 +17,7 @@ namespace detail {
 // Renderer implementation that uses Vulkan.
 class VkRenderer : public IRenderer {
 public:
-    constexpr VkRenderer(Window* window) noexcept : IRenderer(window) {
+    constexpr VkRenderer(Window* window, const Properties& properties) noexcept : IRenderer(window, properties) {
     }
 
     // Initializes the Vulkan renderer.
@@ -61,6 +60,9 @@ private:
 
     // The required device extensions needed for the Vulkan renderer.
     static std::vector<const char*> sDeviceExtensions;
+
+    // Map for getting the Vulkan present mode from the render swap interval.
+    static const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;

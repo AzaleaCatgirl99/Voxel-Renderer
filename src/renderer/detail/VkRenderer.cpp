@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <vector>
 #include "util/BufferedFile.h"
+#include "util/Constants.h"
 #include "util/Window.h"
 
 namespace detail {
@@ -23,6 +24,12 @@ std::vector<const char*> VkRenderer::sDeviceExtensions = {
     ,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
 #endif
 };
+
+// Map for getting the Vulkan present mode from the render swap interval.
+const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> VkRenderer::sPresentModes =
+            {{RENDER_SWAP_INTERVAL_IMMEDIATE, VK_PRESENT_MODE_IMMEDIATE_KHR},
+            {RENDER_SWAP_INTERVAL_VSYNC, VK_PRESENT_MODE_FIFO_KHR},
+            {RENDER_SWAP_INTERVAL_TRIPLE_BUFFERING, VK_PRESENT_MODE_MAILBOX_KHR}};
 
 // Sets what layers to enable.
 std::vector<const char*> VkRenderer::sLayers = {
@@ -84,6 +91,9 @@ void VkRenderer::Initialize() {
 }
 
 void VkRenderer::Destroy() {
+    for (auto imageView : m_swapChainImageViews)
+        vkDestroyImageView(m_logicalDevice, imageView, VK_NULL_HANDLE);
+
     vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, VK_NULL_HANDLE);
 
     vkDestroyDevice(m_logicalDevice, nullptr);
@@ -357,12 +367,8 @@ VkRenderer::QueueFamilyIndices VkRenderer::GetQueueFamilies(VkPhysicalDevice dev
         if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.m_graphics = i;
 
-        // Checks whether the device supports surface presentation.
-        VkBool32 presentationSupport = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentationSupport);
-
         // Adds the presentation index to the indices if support exists.
-        if (presentationSupport)
+        if (SDL_Vulkan_GetPresentationSupport(m_instance, device, i))
             indices.m_presentation = i;
 
         // Breaks if everything has already been added to the indices.
@@ -401,29 +407,33 @@ void VkRenderer::CreateLogicalDevice() {
     }
 
     // Gets the physical device's features.
-    VkPhysicalDeviceFeatures deviceFeatures;
-    vkGetPhysicalDeviceFeatures(m_physicalDevice, &deviceFeatures);
+    VkPhysicalDeviceFeatures features;
+    vkGetPhysicalDeviceFeatures(m_physicalDevice, &features);
+#ifdef SDL_PLATFORM_MACOS
+    // Disables robust buffer access if the platform is macOS.
+    features.robustBufferAccess = VK_FALSE;
+#endif
 
     // Create the info struct for the logical device.
-    VkDeviceCreateInfo logicalDeviceCreateInfo = {
+    VkDeviceCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
         .pQueueCreateInfos = queueCreateInfos.data(), // Links the queues.
         .enabledExtensionCount = static_cast<uint32_t>(sDeviceExtensions.size()),
         .ppEnabledExtensionNames = sDeviceExtensions.data(),
-        .pEnabledFeatures = &deviceFeatures // Links the device features.
+        .pEnabledFeatures = &features // Links the device features.
     };
 
     // Enables device-specific validation layer support for older implementations.
     if (sEnableValidationLayers) {
-        logicalDeviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(sLayers.size());
-        logicalDeviceCreateInfo.ppEnabledLayerNames = sLayers.data();
+        createInfo.enabledLayerCount = static_cast<uint32_t>(sLayers.size());
+        createInfo.ppEnabledLayerNames = sLayers.data();
     } else {
-        logicalDeviceCreateInfo.enabledLayerCount = 0;
+        createInfo.enabledLayerCount = 0;
     }
 
     // Creates the logical device.
-    VkResult result = vkCreateDevice(m_physicalDevice, &logicalDeviceCreateInfo, VK_NULL_HANDLE, &m_logicalDevice);
+    VkResult result = vkCreateDevice(m_physicalDevice, &createInfo, VK_NULL_HANDLE, &m_logicalDevice);
     if (result != VK_SUCCESS)
         throw InterpretVkError(result, "Failed to create logical device!");
 
@@ -544,13 +554,12 @@ VkSurfaceFormatKHR VkRenderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfa
 }
 
 VkPresentModeKHR VkRenderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-    // Use VK_PRESENT_MODE_MAILBOX_KHR if it is available, otherwise VK_PRESENT_MODE_FIFO_KHR.
-    // VK_PRESENT_MODE_MAILBOX_KHR trades off some energy usage for lower latency.
+    // Checks if the swap interval from the renderer properties is usable. If not, then VSYNC is used instead.
     for (const auto& availablePresentMode : availablePresentModes)
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        if (availablePresentMode == sPresentModes.at(m_properties.m_swapInterval))
             return availablePresentMode;
 
-    return VK_PRESENT_MODE_FIFO_KHR;
+    return sPresentModes.at(RENDER_SWAP_INTERVAL_VSYNC);
 }
 
 VkExtent2D VkRenderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
