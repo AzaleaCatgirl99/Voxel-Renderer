@@ -5,6 +5,8 @@ This is a WIP open source voxel renderer made in Vulkan. Beware of bugs and issu
 ## Libraries Used
 - SDL3
 - Vulkan
+- GLM
+- ImGUI
 
 ## Contributors
 - AzaleaCatgirl99

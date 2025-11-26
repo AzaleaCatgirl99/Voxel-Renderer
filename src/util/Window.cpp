@@ -5,7 +5,7 @@
 Logger Window::sLogger = Logger("Window");
 
 Window::Window(const char* title, const DisplayMode& mode, eRenderPipeline pipeline) {
-    m_pipeline = pipeline;
+    m_ePipeline = pipeline;
 
     // Initializes the the SDL3 video system, which is required for window management.
 	if (!SDL_Init(SDL_INIT_VIDEO))
@@ -38,10 +38,10 @@ Window::Window(const char* title, const DisplayMode& mode, eRenderPipeline pipel
         flags |= SDL_WINDOW_BORDERLESS;
 
     // Creates a resizable window. Aborts the app if failed.
-	m_internal = SDL_CreateWindow(title, mode.m_width, mode.m_height, flags);
-    if (!m_internal)
+	m_pHandler = SDL_CreateWindow(title, mode.m_width, mode.m_height, flags);
+    if (!m_pHandler)
         throw sLogger.RuntimeError("Failed to create internal window.");
 
-    if (!SDL_SetWindowMinimumSize(m_internal, mode.m_minWidth, mode.m_minHeight))
+    if (!SDL_SetWindowMinimumSize(m_pHandler, mode.m_minWidth, mode.m_minHeight))
         throw sLogger.RuntimeError("Failed to set the minimum size.");
 }

@@ -1,6 +1,7 @@
 #include "renderer/detail/VkRenderer.h"
 
 #include <SDL3/SDL_vulkan.h>
+#include <vulkan/vulkan_beta.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -121,6 +122,7 @@ void VkRenderer::SetupRequiredExtensions() {
     // Add support for macOS.
     #ifdef SDL_PLATFORM_MACOS
     sRequiredExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    sRequiredExtensions.emplace_back("VK_KHR_get_physical_device_properties2");
     #endif
 
     // Add extension for validation layer message callback.
@@ -335,12 +337,20 @@ void VkRenderer::CreateLogicalDevice() {
     // Create a blank device features since we do not need any special support.
     VkPhysicalDeviceFeatures deviceFeatures{};
 
+    // Device extensions to use.
+    std::vector<const char*> deviceExtensions;
+#ifdef SDL_PLATFORM_MACOS
+    deviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    deviceExtensions.emplace_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+#endif
+
     // Create the info struct for the logical device.
     VkDeviceCreateInfo logicalDeviceCreateInfo{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &graphicsQueueCreateInfo, // Link the graphics queue.
-        .enabledExtensionCount = 0,
+        .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+        .ppEnabledExtensionNames = deviceExtensions.data(),
         .pEnabledFeatures = &deviceFeatures // Link the device features.
     };
 
@@ -388,11 +398,11 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
             return sLogger.RuntimeError("Too many objects! ", genericError);
         case VK_ERROR_UNKNOWN:
             return sLogger.RuntimeError("Unknown error occurred! ", genericError);
-        #ifndef SDL_PLATFORM_MACOS
-        case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
-        #else
+#ifdef SDL_PLATFORM_MACOS
         case VK_ERROR_VALIDATION_FAILED_EXT: // Use the EXT version for macOS
-        #endif
+#else
+        case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
+#endif
             return sLogger.RuntimeError("Validation failed! ", genericError);
         default:
             return sLogger.RuntimeError("Uknown error code [", result, "]! ", genericError);
