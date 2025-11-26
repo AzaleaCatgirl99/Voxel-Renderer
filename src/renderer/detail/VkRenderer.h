@@ -4,8 +4,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <flat_map>
 #include <optional>
+#include <unordered_map>
 #include <vulkan/vulkan.h>
 #include "util/Constants.h"
 #include "util/Features.h"
@@ -62,7 +62,7 @@ private:
     static std::vector<const char*> sDeviceExtensions;
 
     // Map for getting the Vulkan present mode from the render swap interval.
-    static const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
+    static const std::unordered_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;
@@ -165,6 +165,9 @@ private:
 
     // Creates the image views needed for the swap chain.
     void CreateImageViews();
+    
+    // Creates the render pass.
+    void CreateRenderPass();
 
     // Creates the graphics pipeline used for testing.
     // TODO replace with pipeline factory utility.
@@ -182,6 +185,7 @@ private:
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
     std::vector<VkImageView> m_swapChainImageViews;
+    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
 };
 
 }

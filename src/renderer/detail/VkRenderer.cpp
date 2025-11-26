@@ -26,7 +26,7 @@ std::vector<const char*> VkRenderer::sDeviceExtensions = {
 };
 
 // Map for getting the Vulkan present mode from the render swap interval.
-const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> VkRenderer::sPresentModes =
+const std::unordered_map<eRenderSwapInterval, VkPresentModeKHR> VkRenderer::sPresentModes =
             {{RENDER_SWAP_INTERVAL_IMMEDIATE, VK_PRESENT_MODE_IMMEDIATE_KHR},
             {RENDER_SWAP_INTERVAL_VSYNC, VK_PRESENT_MODE_FIFO_KHR},
             {RENDER_SWAP_INTERVAL_TRIPLE_BUFFERING, VK_PRESENT_MODE_MAILBOX_KHR}};
@@ -91,12 +91,14 @@ void VkRenderer::Initialize() {
 }
 
 void VkRenderer::Destroy() {
+    vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, VK_NULL_HANDLE);
+
     for (auto imageView : m_swapChainImageViews)
         vkDestroyImageView(m_logicalDevice, imageView, VK_NULL_HANDLE);
 
     vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, VK_NULL_HANDLE);
 
-    vkDestroyDevice(m_logicalDevice, nullptr);
+    vkDestroyDevice(m_logicalDevice, VK_NULL_HANDLE);
 
     if (sEnableValidationLayers)
         DestroyDebugUtilsMessengerEXT(VK_NULL_HANDLE);
@@ -172,7 +174,7 @@ void VkRenderer::SetupRequiredExtensions() {
 bool VkRenderer::CheckValidationLayerSupport() {
     // Find the number of validation layers available.
     uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    vkEnumerateInstanceLayerProperties(&layerCount, VK_NULL_HANDLE);
 
     // Find the properties of the available validation layers.
     std::vector<VkLayerProperties> availableLayers(layerCount);
@@ -458,7 +460,8 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
     // Swap chain - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html
     // Image view - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateImageView.html
-    // Shader module = https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateShaderModule.html
+    // Shader module - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateShaderModule.html
+    // Pipeline layout - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreatePipelineLayout.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -484,6 +487,8 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
             return sLogger.RuntimeError(genericError, " Surface lost.");
         case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR:
             return sLogger.RuntimeError(genericError, " Invalid opaque capture address.");
+        case VK_ERROR_INVALID_SHADER_NV:
+            return sLogger.RuntimeError(genericError, " Invalid shader.");
         case VK_ERROR_UNKNOWN:
             return sLogger.RuntimeError(genericError, " Unknown error occurred.");
 #ifdef SDL_PLATFORM_MACOS
@@ -492,8 +497,6 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
         case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
 #endif
             return sLogger.RuntimeError(genericError, " Validation failed.");
-        case VK_ERROR_INVALID_SHADER_NV:
-            return sLogger.RuntimeError(genericError, " Invalid shader.");
         default:
             return sLogger.RuntimeError(genericError, " Uknown error code [", result, "].");
     }
@@ -502,10 +505,10 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
 bool VkRenderer::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
     // Get extension information. Find number of extensions first for allocating the extension vector.
     uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+    vkEnumerateDeviceExtensionProperties(device, VK_NULL_HANDLE, &extensionCount, VK_NULL_HANDLE);
 
     std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+    vkEnumerateDeviceExtensionProperties(device, VK_NULL_HANDLE, &extensionCount, availableExtensions.data());
 
     // Ensure all required device extensions are supported.
     std::set<std::string> requiredExtensions(sDeviceExtensions.begin(), sDeviceExtensions.end());
@@ -524,7 +527,7 @@ VkRenderer::SwapChainSupportDetails VkRenderer::GetSwapChainSupport(VkPhysicalDe
 
     // Get the swap chain formats.
     uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, VK_NULL_HANDLE);
 
     if (formatCount != 0) {
         details.m_formats.resize(formatCount);
@@ -533,7 +536,7 @@ VkRenderer::SwapChainSupportDetails VkRenderer::GetSwapChainSupport(VkPhysicalDe
 
     // Get the swap chain present modes.
     uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, VK_NULL_HANDLE);
     
     if (presentModeCount != 0) {
         details.m_presentModes.resize(presentModeCount);
@@ -626,13 +629,13 @@ void VkRenderer::CreateSwapChain() {
     }
 
     // Create the swap chain.
-    VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, nullptr, &m_swapChain);
+    VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, VK_NULL_HANDLE, &m_swapChain);
     if (result != VK_SUCCESS)
         InterpretVkError(result, "Failed to create swap chain!");
     sLogger.Info("Created swap chain.");
 
     // Load the swap chain images.
-    vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, nullptr);
+    vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, VK_NULL_HANDLE);
     m_swapChainImages.resize(imageCount); // Allocate space first.
     vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, m_swapChainImages.data());
 
@@ -666,11 +669,15 @@ void VkRenderer::CreateImageViews() {
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
         // Create the image view.
-        VkResult result = vkCreateImageView(m_logicalDevice, &imageViewCreateInfo, nullptr, &m_swapChainImageViews[i]);
+        VkResult result = vkCreateImageView(m_logicalDevice, &imageViewCreateInfo, VK_NULL_HANDLE, &m_swapChainImageViews[i]);
         if (result != VK_SUCCESS)
             throw InterpretVkError(result, "Failed to create image view.");
     }
     sLogger.Info("Created image views.");
+}
+
+void VkRenderer::CreateRenderPass() {
+
 }
 
 void VkRenderer::CreateTestGraphicsPipeline() {
@@ -723,6 +730,129 @@ void VkRenderer::CreateTestGraphicsPipeline() {
 
     // Simple array for use in the graphics pipeline object creation.
     VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+    // Configure the dynamic state setup.
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+    VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates = dynamicStates.data()
+    };
+
+    // Configure how vertex data is passed to the vertex shader.
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .pVertexBindingDescriptions = VK_NULL_HANDLE,
+        .vertexAttributeDescriptionCount = 0,
+        .pVertexAttributeDescriptions = VK_NULL_HANDLE
+    };
+
+    // Configure how vertices are interpreted.
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE
+    };
+
+    // Configure the scissor.
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = m_swapChainExtent
+    };
+
+    // Configure the viewport.
+    VkViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = (float) m_swapChainExtent.width,
+        .height = (float) m_swapChainExtent.height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+
+    // Configure the viewport state.
+    VkPipelineViewportStateCreateInfo viewportStateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1, // Only need 1 viewport and state.
+        .pViewports = &viewport,
+        .scissorCount = 1,
+        .pScissors = &scissor
+    };
+
+    // Configure the rasterizer.
+    VkPipelineRasterizationStateCreateInfo rasterizerInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .depthClampEnable = VK_FALSE, // Discard off-screen fragments, do not clamp.
+        .rasterizerDiscardEnable = VK_FALSE,
+        .polygonMode = VK_POLYGON_MODE_FILL, // Fill triangles.
+        .cullMode = VK_CULL_MODE_BACK_BIT,
+        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .depthBiasEnable = VK_FALSE,
+        .depthBiasConstantFactor = 0.0f,
+        .depthBiasClamp = 0.0f,
+        .depthBiasSlopeFactor = 0.0f,
+        .lineWidth = 1.0f
+    };
+
+    // Configure multisampling. Disabled for now.
+    VkPipelineMultisampleStateCreateInfo multisamplingInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        .sampleShadingEnable = VK_FALSE,
+        .minSampleShading = 1.0f,
+        .pSampleMask = VK_NULL_HANDLE,
+        .alphaToCoverageEnable = VK_FALSE,
+        .alphaToOneEnable = VK_FALSE,
+    };
+
+    // Configure depth and stencil testing in the future.
+
+    // Configure color blending for each frame buffer. Pass colors through unmodified for now.
+    // Important for blending alpha channels.
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo = {
+        .blendEnable = VK_FALSE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_ONE, // Optional.
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional.
+        .colorBlendOp = VK_BLEND_OP_ADD, // Optional.
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, // Optional.
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional.
+        .alphaBlendOp = VK_BLEND_OP_ADD, // Optional.
+        .colorWriteMask = 
+            VK_COLOR_COMPONENT_R_BIT |
+            VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT |
+            VK_COLOR_COMPONENT_A_BIT
+    };
+
+    // Configure global color blending rules that applies to all frame buffers.
+    VkPipelineColorBlendStateCreateInfo ColorBlendingInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable = VK_FALSE,
+        .logicOp = VK_LOGIC_OP_COPY,
+        .attachmentCount = 1,
+        .pAttachments = &colorBlendAttachmentInfo
+    };
+    ColorBlendingInfo.blendConstants[0] = 0.0f;
+    ColorBlendingInfo.blendConstants[1] = 0.0f;
+    ColorBlendingInfo.blendConstants[2] = 0.0f;
+    ColorBlendingInfo.blendConstants[3] = 0.0f;
+
+    // Configure and create pipeline layout.
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = VK_NULL_HANDLE,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = VK_NULL_HANDLE
+    };
+
+    result = vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_pipelineLayout);
+    if (result != VK_SUCCESS)
+        throw InterpretVkError(result, "Failed to create pipeline layout.");
+    sLogger.Info("Created pipeline layout.");
 
     // Deletes the shader modules. These should be at the end of the function.
     vkDestroyShaderModule(m_logicalDevice, fragShaderModule, VK_NULL_HANDLE);
