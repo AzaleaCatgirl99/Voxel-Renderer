@@ -7,6 +7,10 @@
 #include "util/Constants.h"
 #include "util/Logger.h"
 
+namespace detail {
+class VkRenderer;
+}
+
 // Struct for toggling default display features.
 struct DisplayMode final {
     int m_width = 0;
@@ -91,7 +95,7 @@ public:
         return SDL_PollEvent(&m_uEvent);
     }
 private:
-    friend class IRenderer;
+    friend detail::VkRenderer;
 
     static Logger sLogger;
 

@@ -1,10 +1,13 @@
 #include "renderer/detail/VkRenderer.h"
 
+#include <SDL3/SDL_error.h>
 #include <SDL3/SDL_vulkan.h>
+#include <set>
 #include <vulkan/vulkan_beta.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "util/Window.h"
 
 namespace detail {
 
@@ -51,6 +54,9 @@ void VkRenderer::Initialize() {
     // Set up the debug messenger for catching info from the validation layers.
     SetupDebugMessenger();
 
+    // Creates the surface.
+    CreateSurface();
+
     // Selects the best GPU to use.
     SelectBestPhysicalDevice();
 
@@ -63,6 +69,8 @@ void VkRenderer::Destroy() {
 
     if (sEnableValidationLayers)
         DestroyDebugUtilsMessengerEXT(VK_NULL_HANDLE);
+
+    SDL_Vulkan_DestroySurface(m_instance, m_surface, VK_NULL_HANDLE);
 
     vkDestroyInstance(m_instance, VK_NULL_HANDLE);
 }
@@ -264,6 +272,8 @@ void VkRenderer::SelectBestPhysicalDevice() {
     }
 
     m_physicalDevice = devices[currentBestDeviceIndex];
+
+    sLogger.Info("Using physical device with index '", currentBestDeviceIndex, "'.");
 }
 
 bool VkRenderer::IsPhysicalDeviceUsable(VkPhysicalDevice device) {
@@ -309,6 +319,14 @@ VkRenderer::QueueFamilyIndices VkRenderer::GetQueueFamilies(VkPhysicalDevice dev
         if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.m_graphics = i;
 
+        // Checks whether the device supports surface presentation.
+        VkBool32 presentationSupport = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentationSupport);
+
+        // Adds the presentation index to the indices if support exists.
+        if (presentationSupport)
+            indices.m_presentation = i;
+
         // Breaks if everything has already been added to the indices.
         if (indices.HasEverything())
             break;
@@ -323,38 +341,49 @@ void VkRenderer::CreateLogicalDevice() {
 
     // Ensure graphics is not empty.
     if (!indices.m_graphics.has_value())
-        throw sLogger.RuntimeError("No graphics family found! Failed to create the logical device.");
+        throw sLogger.RuntimeError("Failed to create the logical device. No graphics family found!");
 
-    // Create the graphics queue info struct.
+    // Ensure presentation is not empty.
+    if (!indices.m_presentation.has_value())
+        throw sLogger.RuntimeError("Failed to create the logical device. No presentation family found!");
+
+    // Gets the unique queue families that exist.
+    std::set<uint32_t> uniqueQueueFamilies = {indices.m_graphics.value(), indices.m_presentation.value()};
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     float queuePriority = 1.0f;
-    VkDeviceQueueCreateInfo graphicsQueueCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = indices.m_graphics.value(),
-        .queueCount = 1,
-        .pQueuePriorities = &queuePriority
-    };
 
-    // Create a blank device features since we do not need any special support.
-    VkPhysicalDeviceFeatures deviceFeatures{};
+    // Creates all of the create info queue families.
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+        queueCreateInfos.emplace_back(VkDeviceQueueCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = queueFamily,
+            .queueCount = 1,
+            .pQueuePriorities = &queuePriority
+        });
+    }
+
+    // Gets the physical device's features.
+    VkPhysicalDeviceFeatures deviceFeatures;
+    vkGetPhysicalDeviceFeatures(m_physicalDevice, &deviceFeatures);
 
     // Device extensions to use.
     std::vector<const char*> deviceExtensions;
-#ifdef SDL_PLATFORM_MACOS
     deviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+#ifdef SDL_PLATFORM_MACOS
     deviceExtensions.emplace_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 #endif
 
     // Create the info struct for the logical device.
-    VkDeviceCreateInfo logicalDeviceCreateInfo{
+    VkDeviceCreateInfo logicalDeviceCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &graphicsQueueCreateInfo, // Link the graphics queue.
+        .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
+        .pQueueCreateInfos = queueCreateInfos.data(), // Links the queues.
         .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
         .ppEnabledExtensionNames = deviceExtensions.data(),
-        .pEnabledFeatures = &deviceFeatures // Link the device features.
+        .pEnabledFeatures = &deviceFeatures // Links the device features.
     };
 
-    // Enable device-specific validation layer support for older implementations.
+    // Enables device-specific validation layer support for older implementations.
     if (sEnableValidationLayers) {
         logicalDeviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(sLayers.size());
         logicalDeviceCreateInfo.ppEnabledLayerNames = sLayers.data();
@@ -362,14 +391,23 @@ void VkRenderer::CreateLogicalDevice() {
         logicalDeviceCreateInfo.enabledLayerCount = 0;
     }
 
-    // Create the logical device.
+    // Creates the logical device.
     VkResult result = vkCreateDevice(m_physicalDevice, &logicalDeviceCreateInfo, VK_NULL_HANDLE, &m_logicalDevice);
     if (result != VK_SUCCESS)
         throw InterpretVkError(result, "Failed to create the logical device.");
+
     sLogger.Info("Created the logical device.");
 
-    // Get the graphics queue handle.
+    // Gets the queue handles.
     vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
+    vkGetDeviceQueue(m_logicalDevice, indices.m_presentation.value(), uniqueQueueFamilies.size() < 2 ? 0 : 1, &m_presentationQueue);
+}
+
+void VkRenderer::CreateSurface() {
+    if (!SDL_Vulkan_CreateSurface(m_window->m_pHandler, m_instance, VK_NULL_HANDLE, &m_surface))
+        throw sLogger.RuntimeError("Failed to create surface! ", SDL_GetError());
+
+    sLogger.Info("Created the surface.");
 }
 
 std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* genericError) {

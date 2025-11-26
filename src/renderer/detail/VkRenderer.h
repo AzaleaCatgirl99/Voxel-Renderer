@@ -1,6 +1,8 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
+#include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -86,23 +88,8 @@ private:
         const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
         void* user_data);
 
-    // Checks whether a specific physical device is usable for the renderer.
-    static bool IsPhysicalDeviceUsable(VkPhysicalDevice device);
-
     // Gets the score of the given physical device.
     static size_t GetPhysicalDeviceScore(VkPhysicalDevice device);
-
-    // Struct for storing queue family indices
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> m_graphics;
-
-        constexpr bool HasEverything() const noexcept {
-            return m_graphics.has_value();
-        }
-    };
-
-    // Gets the queue families for a specific physical device.
-    static QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
 
     // Creates the Vulkan instance.
     void CreateInstance();
@@ -112,6 +99,22 @@ private:
 
     // Selects the best physical device (AKA GPU) that can use be used in renderer.
     void SelectBestPhysicalDevice();
+
+    // Checks whether a specific physical device is usable for the renderer.
+    bool IsPhysicalDeviceUsable(VkPhysicalDevice device);
+
+    // Struct for storing queue family indices
+    struct QueueFamilyIndices {
+        std::optional<uint32_t> m_graphics;
+        std::optional<uint32_t> m_presentation;
+
+        constexpr bool HasEverything() const noexcept {
+            return m_graphics.has_value() && m_presentation.has_value();
+        }
+    };
+
+    // Gets the queue families for a specific physical device.
+    QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
 
     // Creates the logical device and assigns the graphics queue handle.
     void CreateLogicalDevice();
@@ -125,11 +128,16 @@ private:
     // Loads and calls the extension function for destroying the debug messenger.
     void DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* allocator);
 
+    // Creates the window surface needed for the renderer.
+    void CreateSurface();
+
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
     VkDevice m_logicalDevice = VK_NULL_HANDLE;
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
+    VkQueue m_presentationQueue = VK_NULL_HANDLE;
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
 };
 
 }
