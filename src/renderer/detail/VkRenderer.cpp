@@ -2,11 +2,13 @@
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_vulkan.h>
+#include <SDL3/SDL_filesystem.h>
 #include <set>
 #include <vulkan/vulkan_beta.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "util/BufferedFile.h"
 #include "util/Window.h"
 
 namespace detail {
@@ -76,6 +78,9 @@ void VkRenderer::Initialize() {
 
     // Create the image views for the swap chain.
     CreateImageViews();
+
+    // Creates the test graphics pipeline.
+    CreateTestGraphicsPipeline();
 }
 
 void VkRenderer::Destroy() {
@@ -443,6 +448,7 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
     // Swap chain - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html
     // Image view - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateImageView.html
+    // Shader module = https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateShaderModule.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -476,6 +482,8 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
         case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
 #endif
             return sLogger.RuntimeError(genericError, " Validation failed.");
+        case VK_ERROR_INVALID_SHADER_NV:
+            return sLogger.RuntimeError(genericError, " Invalid shader.");
         default:
             return sLogger.RuntimeError(genericError, " Uknown error code [", result, "].");
     }
@@ -552,8 +560,8 @@ VkExtent2D VkRenderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabili
 
     // Get the width and height of the window.
     VkExtent2D actualExtent = {
-        static_cast<uint32_t>(m_window->Width()),
-        static_cast<uint32_t>(m_window->Height())
+        .width = static_cast<uint32_t>(m_window->DisplayWidth()),
+        .height = static_cast<uint32_t>(m_window->DisplayHeight())
     };
 
     // Clamp the values to be within the maximum capabilities for the extent.
@@ -580,7 +588,7 @@ void VkRenderer::CreateSwapChain() {
         imageCount = swapChainSupport.m_capabilities.maxImageCount;
     
     // Create the swap chain info struct.
-    VkSwapchainCreateInfoKHR swapChainCreateInfo{
+    VkSwapchainCreateInfoKHR swapChainCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = m_surface,
         .minImageCount = imageCount,
@@ -654,6 +662,62 @@ void VkRenderer::CreateImageViews() {
             throw InterpretVkError(result, "Failed to create image view.");
     }
     sLogger.Info("Created image views.");
+}
+
+void VkRenderer::CreateTestGraphicsPipeline() {
+    // Gets shader file data.
+    std::string basePath = SDL_GetBasePath();
+    BufferedFile vertShader = BufferedFile::Read(basePath + "assets/shaders/test_vert.spv", true);
+    BufferedFile fragShader = BufferedFile::Read(basePath + "assets/shaders/test_frag.spv", true);
+
+    // Creates the vertex shader info.
+    VkShaderModuleCreateInfo vertShaderCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = vertShader.Size(),
+        .pCode = vertShader.DataAsUInt32()
+    };
+
+    // Creates vertex shader module.
+    VkShaderModule vertShaderModule;
+    VkResult result = vkCreateShaderModule(m_logicalDevice, &vertShaderCreateInfo, VK_NULL_HANDLE, &vertShaderModule);
+    if (result != VK_SUCCESS)
+        throw InterpretVkError(result, "Failed to create vertex shader module!");
+
+    // Creates the fragment shader info.
+    VkShaderModuleCreateInfo fragShaderCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = fragShader.Size(),
+        .pCode = fragShader.DataAsUInt32()
+    };
+
+    // Creates fragment shader module.
+    VkShaderModule fragShaderModule;
+    result = vkCreateShaderModule(m_logicalDevice, &fragShaderCreateInfo, VK_NULL_HANDLE, &fragShaderModule);
+    if (result != VK_SUCCESS)
+        throw InterpretVkError(result, "Failed to create fragment shader module!");
+
+    // Creates the vertex shader stage info.
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_VERTEX_BIT,
+        .module = vertShaderModule,
+        .pName = "main"
+    };
+    
+    // Creates the fragment shader stage info.
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .module = fragShaderModule,
+        .pName = "main"
+    };
+
+    // Simple array for use in the graphics pipeline object creation.
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+    // Deletes the shader modules. These should be at the end of the function.
+    vkDestroyShaderModule(m_logicalDevice, fragShaderModule, VK_NULL_HANDLE);
+    vkDestroyShaderModule(m_logicalDevice, vertShaderModule, VK_NULL_HANDLE);
 }
 
 }

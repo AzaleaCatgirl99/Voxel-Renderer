@@ -5,7 +5,9 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <flat_map>
 #include <optional>
+#include <string>
 #include <vulkan/vulkan.h>
 #include "util/Features.h"
 #include "util/Logger.h"
@@ -161,6 +163,10 @@ private:
 
     // Creates the image views needed for the swap chain.
     void CreateImageViews();
+
+    // Creates the graphics pipeline used for testing.
+    // TODO replace with pipeline factory utility.
+    void CreateTestGraphicsPipeline();
 
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
