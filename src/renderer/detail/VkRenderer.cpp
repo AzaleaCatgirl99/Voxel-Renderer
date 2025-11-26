@@ -89,7 +89,7 @@ void VkRenderer::CreateInstance() {
     // Create the Vulkan instance.
     VkResult result = vkCreateInstance(&sCreateInfo, VK_NULL_HANDLE, &m_instance);
     if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create Vulkan instance.");
+        throw InterpretVkError(result, "Failed to create Vulkan instance!");
     sLogger.Info("Created the Vulkan instance.");
 }
 
@@ -215,7 +215,7 @@ void VkRenderer::SetupDebugMessenger() {
 
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
     if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create the debug messenger.");
+        throw InterpretVkError(result, "Failed to create the debug messenger!");
     sLogger.Info("Created the debug messenger.");
 }
 
@@ -244,7 +244,7 @@ void VkRenderer::DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* allo
     if (func)
         func(m_instance, m_debugMessenger, allocator); // Run normally.
     else
-        sLogger.Error("Unable to load vkDestroyDebugUtilsMessengerEXT! Failed to destroy debug messenger.");
+        sLogger.Error("Failed to destroy debug messenger! Unable to load vkDestroyDebugUtilsMessengerEXT.");
 }
 
 void VkRenderer::SelectBestPhysicalDevice() {
@@ -394,7 +394,7 @@ void VkRenderer::CreateLogicalDevice() {
     // Creates the logical device.
     VkResult result = vkCreateDevice(m_physicalDevice, &logicalDeviceCreateInfo, VK_NULL_HANDLE, &m_logicalDevice);
     if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create the logical device.");
+        throw InterpretVkError(result, "Failed to create the logical device!");
 
     sLogger.Info("Created the logical device.");
 
@@ -405,7 +405,7 @@ void VkRenderer::CreateLogicalDevice() {
 
 void VkRenderer::CreateSurface() {
     if (!SDL_Vulkan_CreateSurface(m_window->m_pHandler, m_instance, VK_NULL_HANDLE, &m_surface))
-        throw sLogger.RuntimeError("Failed to create surface! ", SDL_GetError());
+        throw sLogger.RuntimeError("Failed to create surface!", SDL_GetError());
 
     sLogger.Info("Created the surface.");
 }
@@ -417,33 +417,33 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
-            return sLogger.RuntimeError("Extension not present! ", genericError);
+            return sLogger.RuntimeError(genericError, " Extension not present.");
         case VK_ERROR_INCOMPATIBLE_DRIVER:
-            return sLogger.RuntimeError("Driver is not compatible! ", genericError);
+            return sLogger.RuntimeError(genericError, " Driver is not compatible.");
         case VK_ERROR_INITIALIZATION_FAILED:
-            return sLogger.RuntimeError("Initialization failed! ", genericError);
+            return sLogger.RuntimeError(genericError, " Initialization failed.");
         case VK_ERROR_LAYER_NOT_PRESENT:
-            return sLogger.RuntimeError("Validation layer is not present! ", genericError);
+            return sLogger.RuntimeError(genericError, " Validation layer is not present.");
         case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            return sLogger.RuntimeError("Ran out of device memory! ", genericError);
+            return sLogger.RuntimeError(genericError, " Ran out of device memory.");
         case VK_ERROR_OUT_OF_HOST_MEMORY:
-            return sLogger.RuntimeError("Ran out of host memory! ", genericError);
+            return sLogger.RuntimeError(genericError, " Ran out of host memory.");
         case VK_ERROR_DEVICE_LOST:
-            return sLogger.RuntimeError("Device lost! ", genericError);
+            return sLogger.RuntimeError(genericError, " Device lost.");
         case VK_ERROR_FEATURE_NOT_PRESENT:
-            return sLogger.RuntimeError("Feature not present! ", genericError);
+            return sLogger.RuntimeError(genericError, " Feature not present.");
         case VK_ERROR_TOO_MANY_OBJECTS:
-            return sLogger.RuntimeError("Too many objects! ", genericError);
+            return sLogger.RuntimeError(genericError, " Too many objects.");
         case VK_ERROR_UNKNOWN:
-            return sLogger.RuntimeError("Unknown error occurred! ", genericError);
+            return sLogger.RuntimeError(genericError, " Unknown error occurred.");
 #ifdef SDL_PLATFORM_MACOS
         case VK_ERROR_VALIDATION_FAILED_EXT: // Use the EXT version for macOS
 #else
         case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
 #endif
-            return sLogger.RuntimeError("Validation failed! ", genericError);
+            return sLogger.RuntimeError(genericError, " Validation failed.");
         default:
-            return sLogger.RuntimeError("Uknown error code [", result, "]! ", genericError);
+            return sLogger.RuntimeError(genericError, " Uknown error code [", result, "].");
     }
 }
 
