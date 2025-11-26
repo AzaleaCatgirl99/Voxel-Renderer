@@ -159,6 +159,9 @@ private:
     // Creates the window surface needed for the renderer.
     void CreateSurface();
 
+    // Creates the image views needed for the swap chain.
+    void CreateImageViews();
+
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
@@ -167,6 +170,10 @@ private:
     VkQueue m_presentationQueue = VK_NULL_HANDLE;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
     VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
+    std::vector<VkImage> m_swapChainImages;
+    VkFormat m_swapChainImageFormat;
+    VkExtent2D m_swapChainExtent;
+    std::vector<VkImageView> m_swapChainImageViews;
 };
 
 }

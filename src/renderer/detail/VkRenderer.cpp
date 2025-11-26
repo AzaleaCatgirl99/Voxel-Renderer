@@ -73,6 +73,9 @@ void VkRenderer::Initialize() {
 
     // Create the swap chain.
     CreateSwapChain();
+
+    // Create the image views for the swap chain.
+    CreateImageViews();
 }
 
 void VkRenderer::Destroy() {
@@ -439,6 +442,7 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Debug messenger - https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html
     // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
     // Swap chain - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html
+    // Image view - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateImageView.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -462,6 +466,8 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
             return sLogger.RuntimeError(genericError, " Native window in use.");
         case VK_ERROR_SURFACE_LOST_KHR:
             return sLogger.RuntimeError(genericError, " Surface lost.");
+        case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR:
+            return sLogger.RuntimeError(genericError, " Invalid opaque capture address.");
         case VK_ERROR_UNKNOWN:
             return sLogger.RuntimeError(genericError, " Unknown error occurred.");
 #ifdef SDL_PLATFORM_MACOS
@@ -602,12 +608,52 @@ void VkRenderer::CreateSwapChain() {
         swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    //Create the swap chain.
+    // Create the swap chain.
     VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, nullptr, &m_swapChain);
     if (result != VK_SUCCESS)
         InterpretVkError(result, "Failed to create swap chain!");
     sLogger.Info("Created swap chain.");
 
+    // Load the swap chain images.
+    vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, nullptr);
+    m_swapChainImages.resize(imageCount); // Allocate space first.
+    vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, m_swapChainImages.data());
+
+    // Save the image format and extent.
+    m_swapChainImageFormat = surfaceFormat.format;
+    m_swapChainExtent = extent;
+}
+
+void VkRenderer::CreateImageViews() {
+    m_swapChainImageViews.resize(m_swapChainImages.size());
+    for (size_t i = 0; i < m_swapChainImages.size(); i++) {
+        // Create image view struct for each image.
+        VkImageViewCreateInfo imageViewCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = m_swapChainImages[i],
+            .viewType = VK_IMAGE_VIEW_TYPE_2D, // 2D textures.
+            .format = m_swapChainImageFormat
+        };
+
+        // Set the color channel swizzles to defaults.
+        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+        // Set images such that they are accessed simply, no mipmapping or multiple layers.
+        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
+        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+        // Create the image view.
+        VkResult result = vkCreateImageView(m_logicalDevice, &imageViewCreateInfo, nullptr, &m_swapChainImageViews[i]);
+        if (result != VK_SUCCESS)
+            throw InterpretVkError(result, "Failed to create image view.");
+    }
+    sLogger.Info("Created image views.");
 }
 
 }
