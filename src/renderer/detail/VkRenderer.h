@@ -36,7 +36,7 @@ private:
 #endif
 
     // Set what severities to enable in the debug messenger.
-    static constexpr const uint32_t sEnabledSeverityFlags = 0 |
+    static constexpr const uint32_t sEnabledSeverityFlags =
 #if VXL_RENDERER_VERBOSE_LOG == VXL_TRUE
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 #endif
@@ -54,8 +54,11 @@ private:
     // Sets what layers to enable.
     static std::vector<const char*> sLayers;
 
-    // The required extensions needed for the renderer.
-    static std::vector<const char*> sRequiredExtensions;
+    // The required instance extensions needed for the Vulkan renderer.
+    static std::vector<const char*> sInstanceExtensions;
+
+    // The required device extensions needed for the Vulkan renderer.
+    static std::vector<const char*> sDeviceExtensions;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;
@@ -95,7 +98,10 @@ private:
     void CreateInstance();
 
     // Creates the debug messenger.
-    void SetupDebugMessenger();
+    void CreateDebugMessenger();
+
+    // Creates the swap chain.
+    void CreateSwapChain();
 
     // Selects the best physical device (AKA GPU) that can use be used in renderer.
     void SelectBestPhysicalDevice();
@@ -103,7 +109,19 @@ private:
     // Checks whether a specific physical device is usable for the renderer.
     bool IsPhysicalDeviceUsable(VkPhysicalDevice device);
 
-    // Struct for storing queue family indices
+    // Checks if a physical device supports all of the required extensions.
+    bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
+
+    // Chooses a swap surface format to use.
+    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+
+    // Chooses a swap chain present mode to use.
+    VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+
+    // Chooses the swap extent to use and sets the height and width if necessary.
+    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+
+    // Struct for storing queue family indices.
     struct QueueFamilyIndices {
         std::optional<uint32_t> m_graphics;
         std::optional<uint32_t> m_presentation;
@@ -113,8 +131,18 @@ private:
         }
     };
 
-    // Gets the queue families for a specific physical device.
+    // Struct for storing the capabilities of the surface.
+    struct SwapChainSupportDetails {
+        VkSurfaceCapabilitiesKHR m_capabilities;
+        std::vector<VkSurfaceFormatKHR> m_formats;
+        std::vector<VkPresentModeKHR> m_presentModes;
+    };
+
+    // Gets the queue families of a physical device.
     QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
+
+    // Gets the swap chain capabilities of a physical device. 
+    SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice device);
 
     // Creates the logical device and assigns the graphics queue handle.
     void CreateLogicalDevice();
@@ -138,6 +166,7 @@ private:
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     VkQueue m_presentationQueue = VK_NULL_HANDLE;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
+    VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
 };
 
 }

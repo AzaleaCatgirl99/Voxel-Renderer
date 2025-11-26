@@ -12,7 +12,15 @@
 namespace detail {
 
 // The required extensions needed for the renderer.
-std::vector<const char*> VkRenderer::sRequiredExtensions;
+std::vector<const char*> VkRenderer::sInstanceExtensions;
+
+std::vector<const char*> VkRenderer::sDeviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+
+#ifdef SDL_PLATFORM_MACOS // macOS support.
+    ,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+#endif
+};
 
 // Sets what layers to enable.
 std::vector<const char*> VkRenderer::sLayers = {
@@ -52,7 +60,7 @@ void VkRenderer::Initialize() {
     CreateInstance();
 
     // Set up the debug messenger for catching info from the validation layers.
-    SetupDebugMessenger();
+    CreateDebugMessenger();
 
     // Creates the surface.
     CreateSurface();
@@ -62,9 +70,14 @@ void VkRenderer::Initialize() {
 
     // Create the logical device.
     CreateLogicalDevice();
+
+    // Create the swap chain.
+    CreateSwapChain();
 }
 
 void VkRenderer::Destroy() {
+    vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, VK_NULL_HANDLE);
+
     vkDestroyDevice(m_logicalDevice, nullptr);
 
     if (sEnableValidationLayers)
@@ -90,7 +103,7 @@ void VkRenderer::CreateInstance() {
     VkResult result = vkCreateInstance(&sCreateInfo, VK_NULL_HANDLE, &m_instance);
     if (result != VK_SUCCESS)
         throw InterpretVkError(result, "Failed to create Vulkan instance!");
-    sLogger.Info("Created the Vulkan instance.");
+    sLogger.Info("Created Vulkan instance.");
 }
 
 void VkRenderer::SetupInstanceInfo() {
@@ -104,8 +117,8 @@ void VkRenderer::SetupInstanceInfo() {
         .pApplicationInfo = &sAppInfo, // Link the app info struct.
         .enabledLayerCount = static_cast<uint32_t>(sLayers.size()),
         .ppEnabledLayerNames = sLayers.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(sRequiredExtensions.size()),
-        .ppEnabledExtensionNames = sRequiredExtensions.data()
+        .enabledExtensionCount = static_cast<uint32_t>(sInstanceExtensions.size()),
+        .ppEnabledExtensionNames = sInstanceExtensions.data()
     };
 
     // Set validation layers to enable.
@@ -125,17 +138,17 @@ void VkRenderer::SetupRequiredExtensions() {
     sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtensionCount);
 
     // Convert to vector so we can add more extensions.
-    sRequiredExtensions = std::vector<const char*>(sdlExtensions, sdlExtensions + sdlExtensionCount);
+    sInstanceExtensions = std::vector<const char*>(sdlExtensions, sdlExtensions + sdlExtensionCount);
 
     // Add support for macOS.
     #ifdef SDL_PLATFORM_MACOS
-    sRequiredExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    sRequiredExtensions.emplace_back("VK_KHR_get_physical_device_properties2");
+    sInstanceExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    sInstanceExtensions.emplace_back("VK_KHR_get_physical_device_properties2");
     #endif
 
     // Add extension for validation layer message callback.
     if (sEnableValidationLayers)
-        sRequiredExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        sInstanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 }
 
 bool VkRenderer::CheckValidationLayerSupport() {
@@ -210,13 +223,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VkRenderer::DebugCallback(
     }
 }
 
-void VkRenderer::SetupDebugMessenger() {
+void VkRenderer::CreateDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
     if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create the debug messenger!");
-    sLogger.Info("Created the debug messenger.");
+        throw InterpretVkError(result, "Failed to create debug messenger!");
+    sLogger.Info("Created debug messenger.");
 }
 
 VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
@@ -271,15 +284,32 @@ void VkRenderer::SelectBestPhysicalDevice() {
         }
     }
 
+    // Set the physical best physical device.
     m_physicalDevice = devices[currentBestDeviceIndex];
 
-    sLogger.Info("Using physical device with index '", currentBestDeviceIndex, "'.");
+    // Find its name and log it.
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+    sLogger.Info("Using physical device '", properties.deviceName, "'.");
 }
 
 bool VkRenderer::IsPhysicalDeviceUsable(VkPhysicalDevice device) {
     QueueFamilyIndices indices = GetQueueFamilies(device);
 
-    return indices.HasEverything();
+    // Ensure all queue families are supported.
+    if (!indices.HasEverything())
+        return false;
+    
+    // Ensure all required device extensions are supported.
+    if (!CheckDeviceExtensionSupport(device))
+        return false;
+
+    // Ensure required swap chain functionality.
+    SwapChainSupportDetails swapChainSupport = GetSwapChainSupport(device);
+    if (swapChainSupport.m_formats.empty() || swapChainSupport.m_presentModes.empty())
+        return false;
+    
+    return true; // Device is Usable.
 }
 
 size_t VkRenderer::GetPhysicalDeviceScore(VkPhysicalDevice device) {
@@ -341,11 +371,11 @@ void VkRenderer::CreateLogicalDevice() {
 
     // Ensure graphics is not empty.
     if (!indices.m_graphics.has_value())
-        throw sLogger.RuntimeError("Failed to create the logical device. No graphics family found!");
+        throw sLogger.RuntimeError("Failed to create logical device! No graphics family found.");
 
     // Ensure presentation is not empty.
     if (!indices.m_presentation.has_value())
-        throw sLogger.RuntimeError("Failed to create the logical device. No presentation family found!");
+        throw sLogger.RuntimeError("Failed to create logical device! No presentation family found.");
 
     // Gets the unique queue families that exist.
     std::set<uint32_t> uniqueQueueFamilies = {indices.m_graphics.value(), indices.m_presentation.value()};
@@ -366,20 +396,13 @@ void VkRenderer::CreateLogicalDevice() {
     VkPhysicalDeviceFeatures deviceFeatures;
     vkGetPhysicalDeviceFeatures(m_physicalDevice, &deviceFeatures);
 
-    // Device extensions to use.
-    std::vector<const char*> deviceExtensions;
-    deviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-#ifdef SDL_PLATFORM_MACOS
-    deviceExtensions.emplace_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
-#endif
-
     // Create the info struct for the logical device.
     VkDeviceCreateInfo logicalDeviceCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
         .pQueueCreateInfos = queueCreateInfos.data(), // Links the queues.
-        .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
-        .ppEnabledExtensionNames = deviceExtensions.data(),
+        .enabledExtensionCount = static_cast<uint32_t>(sDeviceExtensions.size()),
+        .ppEnabledExtensionNames = sDeviceExtensions.data(),
         .pEnabledFeatures = &deviceFeatures // Links the device features.
     };
 
@@ -394,9 +417,9 @@ void VkRenderer::CreateLogicalDevice() {
     // Creates the logical device.
     VkResult result = vkCreateDevice(m_physicalDevice, &logicalDeviceCreateInfo, VK_NULL_HANDLE, &m_logicalDevice);
     if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create the logical device!");
+        throw InterpretVkError(result, "Failed to create logical device!");
 
-    sLogger.Info("Created the logical device.");
+    sLogger.Info("Created logical device.");
 
     // Gets the queue handles.
     vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
@@ -407,7 +430,7 @@ void VkRenderer::CreateSurface() {
     if (!SDL_Vulkan_CreateSurface(m_window->m_pHandler, m_instance, VK_NULL_HANDLE, &m_surface))
         throw sLogger.RuntimeError("Failed to create surface!", SDL_GetError());
 
-    sLogger.Info("Created the surface.");
+    sLogger.Info("Created surface.");
 }
 
 std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* genericError) {
@@ -415,6 +438,7 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Instance - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateInstance.html
     // Debug messenger - https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html
     // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
+    // Swap chain - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -434,6 +458,10 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
             return sLogger.RuntimeError(genericError, " Feature not present.");
         case VK_ERROR_TOO_MANY_OBJECTS:
             return sLogger.RuntimeError(genericError, " Too many objects.");
+        case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+            return sLogger.RuntimeError(genericError, " Native window in use.");
+        case VK_ERROR_SURFACE_LOST_KHR:
+            return sLogger.RuntimeError(genericError, " Surface lost.");
         case VK_ERROR_UNKNOWN:
             return sLogger.RuntimeError(genericError, " Unknown error occurred.");
 #ifdef SDL_PLATFORM_MACOS
@@ -445,6 +473,141 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
         default:
             return sLogger.RuntimeError(genericError, " Uknown error code [", result, "].");
     }
+}
+
+bool VkRenderer::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
+    // Get extension information. Find number of extensions first for allocating the extension vector.
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+    // Ensure all required device extensions are supported.
+    std::set<std::string> requiredExtensions(sDeviceExtensions.begin(), sDeviceExtensions.end());
+
+    for (const auto& extension : availableExtensions)
+        requiredExtensions.erase(extension.extensionName);
+
+    return requiredExtensions.empty();
+}
+
+VkRenderer::SwapChainSupportDetails VkRenderer::GetSwapChainSupport(VkPhysicalDevice device) {
+    SwapChainSupportDetails details;
+
+    // Get the swap chain capabilities.
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.m_capabilities);
+
+    // Get the swap chain formats.
+    uint32_t formatCount;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+
+    if (formatCount != 0) {
+        details.m_formats.resize(formatCount);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, details.m_formats.data());
+    }
+
+    // Get the swap chain present modes.
+    uint32_t presentModeCount;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+    
+    if (presentModeCount != 0) {
+        details.m_presentModes.resize(presentModeCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, details.m_presentModes.data());
+    }
+
+    return details;
+}
+
+VkSurfaceFormatKHR VkRenderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+    // Check for the best format.
+    for (const auto& availableFormat : availableFormats)
+        if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            return availableFormat;
+
+    // Use the first format if the best one is not present.
+    return availableFormats[0];
+}
+
+VkPresentModeKHR VkRenderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+    // Use VK_PRESENT_MODE_MAILBOX_KHR if it is available, otherwise VK_PRESENT_MODE_FIFO_KHR.
+    // VK_PRESENT_MODE_MAILBOX_KHR trades off some energy usage for lower latency.
+    for (const auto& availablePresentMode : availablePresentModes)
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            return availablePresentMode;
+
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D VkRenderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+    // If extent is at the maximum value, return the extent as is.
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        return capabilities.currentExtent;
+
+    // Get the width and height of the window.
+    VkExtent2D actualExtent = {
+        static_cast<uint32_t>(m_window->Width()),
+        static_cast<uint32_t>(m_window->Height())
+    };
+
+    // Clamp the values to be within the maximum capabilities for the extent.
+    actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+    actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+    return actualExtent;
+}
+
+void VkRenderer::CreateSwapChain() {
+    SwapChainSupportDetails swapChainSupport = GetSwapChainSupport(m_physicalDevice);
+
+    // Get Choose the surface format, present mode, and extent.
+    VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.m_formats);
+    VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.m_presentModes);
+    VkExtent2D extent = ChooseSwapExtent(swapChainSupport.m_capabilities);
+
+    // Set the image count to the minimum plus one so we don't have to wait on the driver.
+    uint32_t imageCount = swapChainSupport.m_capabilities.minImageCount + 1;
+
+    // Account for the special case where the minumum image count equals the maximum image count.
+    // Zero is a special case that means there is no maximum.
+    if (swapChainSupport.m_capabilities.maxImageCount > 0 && imageCount > swapChainSupport.m_capabilities.maxImageCount)
+        imageCount = swapChainSupport.m_capabilities.maxImageCount;
+    
+    // Create the swap chain info struct.
+    VkSwapchainCreateInfoKHR swapChainCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = m_surface,
+        .minImageCount = imageCount,
+        .imageFormat = surfaceFormat.format,
+        .imageColorSpace = surfaceFormat.colorSpace,
+        .imageExtent = extent,
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .preTransform = swapChainSupport.m_capabilities.currentTransform,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = presentMode,
+        .clipped = VK_TRUE,
+        .oldSwapchain = VK_NULL_HANDLE
+    };
+
+    // Handle the cases for whether the queue families are the same.
+    QueueFamilyIndices indices = GetQueueFamilies(m_physicalDevice);
+    uint32_t queueFamilyIndices[] = {indices.m_graphics.value(), indices.m_presentation.value()};
+
+    if (indices.m_graphics != indices.m_presentation) {
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swapChainCreateInfo.queueFamilyIndexCount = 2;
+        swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
+    } else {
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    }
+
+    //Create the swap chain.
+    VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, nullptr, &m_swapChain);
+    if (result != VK_SUCCESS)
+        InterpretVkError(result, "Failed to create swap chain!");
+    sLogger.Info("Created swap chain.");
+
 }
 
 }
