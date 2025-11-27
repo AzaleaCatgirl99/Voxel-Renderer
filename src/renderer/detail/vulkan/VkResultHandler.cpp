@@ -75,7 +75,7 @@ void VkResultHandler::CheckResult(const VkResult result, const char* error, std:
         return;
     }
 
-    if (IsSuccess(result)) {
+    if (result >= 0) {
         if (success.has_value())
             sLogger.Warning(success.value(), " BUT: ", GetResultString(result)); // Warn for other cases.
         return;
