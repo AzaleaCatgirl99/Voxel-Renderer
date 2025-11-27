@@ -26,7 +26,7 @@ std::vector<const char*> VkRenderer::sDeviceExtensions = {
 };
 
 // Map for getting the Vulkan present mode from the render swap interval.
-const std::unordered_map<eRenderSwapInterval, VkPresentModeKHR> VkRenderer::sPresentModes =
+const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> VkRenderer::sPresentModes =
             {{RENDER_SWAP_INTERVAL_IMMEDIATE, VK_PRESENT_MODE_IMMEDIATE_KHR},
             {RENDER_SWAP_INTERVAL_VSYNC, VK_PRESENT_MODE_FIFO_KHR},
             {RENDER_SWAP_INTERVAL_TRIPLE_BUFFERING, VK_PRESENT_MODE_MAILBOX_KHR}};
@@ -843,9 +843,9 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     // Configure and create pipeline layout.
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
+        .setLayoutCount = 0,
         .pSetLayouts = VK_NULL_HANDLE,
-        .pushConstantRangeCount = 1,
+        .pushConstantRangeCount = 0,
         .pPushConstantRanges = VK_NULL_HANDLE
     };
 

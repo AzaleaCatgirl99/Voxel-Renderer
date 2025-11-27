@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <unordered_map>
+#include <flat_map>
 #include <vulkan/vulkan.h>
 #include "util/Constants.h"
 #include "util/Features.h"
@@ -62,7 +62,7 @@ private:
     static std::vector<const char*> sDeviceExtensions;
 
     // Map for getting the Vulkan present mode from the render swap interval.
-    static const std::unordered_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
+    static const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;
