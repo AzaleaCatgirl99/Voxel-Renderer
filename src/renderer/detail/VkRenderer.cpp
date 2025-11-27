@@ -11,7 +11,7 @@
 #include "util/BufferedFile.h"
 #include "util/Constants.h"
 #include "util/Window.h"
-#include "renderer/detail/VkResultHandler.h"
+#include "renderer/detail/vulkan/VkResultHandler.h"
 
 namespace detail {
 

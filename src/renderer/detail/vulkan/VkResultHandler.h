@@ -1,5 +1,6 @@
 #pragma once
 
+#include <flat_map>
 #include <vulkan/vulkan.h>
 #include <unordered_map>
 #include "util/Logger.h"
@@ -21,11 +22,17 @@ private:
     // Logger class for printing debug information.
     static Logger sLogger;
 
+    // The error strings used.
+    static const std::flat_map<VkResult, const char*> sErrorStrings;
+
+    // The success strings used.
+    static const std::flat_map<VkResult, const char*> sSuccessStrings;
+
     // Gets the relevant string for an error code.
-    static const char* GetErrorString(const VkResult error);
+    static std::string GetErrorString(const VkResult error);
 
     // Gets the relevant string for a success code.
-    static const char* GetSuccessString(const VkResult error);
+    static std::string GetSuccessString(const VkResult error);
 };
 
 }
