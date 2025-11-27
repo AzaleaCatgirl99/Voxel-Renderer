@@ -11,6 +11,7 @@
 #include "util/BufferedFile.h"
 #include "util/Constants.h"
 #include "util/Window.h"
+#include "renderer/detail/VkResultHandler.h"
 
 namespace detail {
 
@@ -97,6 +98,8 @@ void VkRenderer::Initialize() {
 }
 
 void VkRenderer::Destroy() {
+    vkDestroyCommandPool(m_logicalDevice, m_commandPool, VK_NULL_HANDLE);
+
     for (auto framebuffer : m_swapChainFramebuffers)
         vkDestroyFramebuffer(m_logicalDevice, framebuffer, VK_NULL_HANDLE);
 
@@ -134,9 +137,9 @@ void VkRenderer::CreateInstance() {
 
     // Create the Vulkan instance.
     VkResult result = vkCreateInstance(&sCreateInfo, VK_NULL_HANDLE, &m_instance);
-    if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create Vulkan instance!");
-    sLogger.Info("Created Vulkan instance.");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create Vulkan instance!");
+    VkResultHandler::InterpretSuccess(result, "Created Vulkan instance.");
 }
 
 void VkRenderer::SetupInstanceInfo() {
@@ -260,9 +263,9 @@ void VkRenderer::CreateDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
-    if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create debug messenger!");
-    sLogger.Info("Created debug messenger.");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create debug messenger!");
+    VkResultHandler::InterpretSuccess(result, "Created debug messenger.");
 }
 
 VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
@@ -449,10 +452,9 @@ void VkRenderer::CreateLogicalDevice() {
 
     // Creates the logical device.
     VkResult result = vkCreateDevice(m_physicalDevice, &createInfo, VK_NULL_HANDLE, &m_logicalDevice);
-    if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create logical device!");
-
-    sLogger.Info("Created logical device.");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create logical device!");
+    VkResultHandler::InterpretSuccess(result, "Created logical device.");
 
     // Gets the queue handles.
     vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
@@ -462,60 +464,7 @@ void VkRenderer::CreateLogicalDevice() {
 void VkRenderer::CreateSurface() {
     if (!SDL_Vulkan_CreateSurface(m_window->m_pHandler, m_instance, VK_NULL_HANDLE, &m_surface))
         throw sLogger.RuntimeError("Failed to create surface!", SDL_GetError());
-
     sLogger.Info("Created surface.");
-}
-
-std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* genericError) {
-    // Supports:
-    // Instance - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateInstance.html
-    // Debug messenger - https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html
-    // Device - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateDevice.html
-    // Swap chain - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html
-    // Image view - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateImageView.html
-    // Shader module - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateShaderModule.html
-    // Pipeline layout - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreatePipelineLayout.html
-    // Render pass - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateRenderPass.html
-    // Graphics pipeline - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateGraphicsPipelines.html
-    // Framebuffer - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateFramebuffer.html
-    switch(result) {
-        case VK_ERROR_EXTENSION_NOT_PRESENT:
-            return sLogger.RuntimeError(genericError, " Extension not present.");
-        case VK_ERROR_INCOMPATIBLE_DRIVER:
-            return sLogger.RuntimeError(genericError, " Driver is not compatible.");
-        case VK_ERROR_INITIALIZATION_FAILED:
-            return sLogger.RuntimeError(genericError, " Initialization failed.");
-        case VK_ERROR_LAYER_NOT_PRESENT:
-            return sLogger.RuntimeError(genericError, " Validation layer is not present.");
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            return sLogger.RuntimeError(genericError, " Ran out of device memory.");
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-            return sLogger.RuntimeError(genericError, " Ran out of host memory.");
-        case VK_ERROR_DEVICE_LOST:
-            return sLogger.RuntimeError(genericError, " Device lost.");
-        case VK_ERROR_FEATURE_NOT_PRESENT:
-            return sLogger.RuntimeError(genericError, " Feature not present.");
-        case VK_ERROR_TOO_MANY_OBJECTS:
-            return sLogger.RuntimeError(genericError, " Too many objects.");
-        case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
-            return sLogger.RuntimeError(genericError, " Native window in use.");
-        case VK_ERROR_SURFACE_LOST_KHR:
-            return sLogger.RuntimeError(genericError, " Surface lost.");
-        case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR:
-            return sLogger.RuntimeError(genericError, " Invalid opaque capture address.");
-        case VK_ERROR_INVALID_SHADER_NV:
-            return sLogger.RuntimeError(genericError, " Invalid shader.");
-        case VK_ERROR_UNKNOWN:
-            return sLogger.RuntimeError(genericError, " Unknown error occurred.");
-#ifdef SDL_PLATFORM_MACOS
-        case VK_ERROR_VALIDATION_FAILED_EXT: // Use the EXT version for macOS
-#else
-        case VK_ERROR_VALIDATION_FAILED: // Error code does not exist on macOS
-#endif
-            return sLogger.RuntimeError(genericError, " Validation failed.");
-        default:
-            return sLogger.RuntimeError(genericError, " Uknown error code [", result, "].");
-    }
 }
 
 bool VkRenderer::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
@@ -646,9 +595,9 @@ void VkRenderer::CreateSwapChain() {
 
     // Create the swap chain.
     VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, VK_NULL_HANDLE, &m_swapChain);
-    if (result != VK_SUCCESS)
-        InterpretVkError(result, "Failed to create swap chain!");
-    sLogger.Info("Created swap chain.");
+    if (VkResultHandler::TestIfError(result))
+        VkResultHandler::InterpretError(result, "Failed to create swap chain!");
+    VkResultHandler::InterpretSuccess(result, "Created swap chain.");
 
     // Load the swap chain images.
     vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, VK_NULL_HANDLE);
@@ -686,8 +635,8 @@ void VkRenderer::CreateImageViews() {
 
         // Create the image view.
         VkResult result = vkCreateImageView(m_logicalDevice, &imageViewCreateInfo, VK_NULL_HANDLE, &m_swapChainImageViews[i]);
-        if (result != VK_SUCCESS)
-            throw InterpretVkError(result, "Failed to create image view.");
+        if (VkResultHandler::TestIfError(result))
+            throw VkResultHandler::InterpretError(result, "Failed to create image view!");
     }
     sLogger.Info("Created image views.");
 }
@@ -728,10 +677,10 @@ void VkRenderer::CreateRenderPass() {
     };
 
     // Creates the render pass.
-    if (vkCreateRenderPass(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_renderPass) != VK_SUCCESS)
-        throw sLogger.RuntimeError("Failed to create render pass!");
-
-    sLogger.Info("Created render pass.");
+    VkResult result = vkCreateRenderPass(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_renderPass);
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create render pass!");
+    VkResultHandler::InterpretSuccess(result, "Created render pass.");
 }
 
 void VkRenderer::CreateTestGraphicsPipeline() {
@@ -750,8 +699,8 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     // Creates vertex shader module.
     VkShaderModule vertShaderModule;
     VkResult result = vkCreateShaderModule(m_logicalDevice, &vertShaderCreateInfo, VK_NULL_HANDLE, &vertShaderModule);
-    if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create vertex shader module!");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create vertex shader module!");
 
     // Creates the fragment shader info.
     VkShaderModuleCreateInfo fragShaderCreateInfo = {
@@ -763,8 +712,8 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     // Creates fragment shader module.
     VkShaderModule fragShaderModule;
     result = vkCreateShaderModule(m_logicalDevice, &fragShaderCreateInfo, VK_NULL_HANDLE, &fragShaderModule);
-    if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create fragment shader module!");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create fragment shader module!");
 
     // Creates the vertex shader stage info.
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {
@@ -888,8 +837,8 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     };
 
     result = vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_pipelineLayout);
-    if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create pipeline layout!");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create pipeline layout!");
     sLogger.Info("Created pipeline layout.");
 
     // Create the graphices pipeline.
@@ -913,11 +862,9 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     };
 
     result = vkCreateGraphicsPipelines(m_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &m_graphicsPipeline);
-    if (result != VK_SUCCESS && result != VK_PIPELINE_COMPILE_REQUIRED_EXT)
-        throw InterpretVkError(result, "Failed to create graphics pipeline!");
-    if (result == VK_PIPELINE_COMPILE_REQUIRED_EXT) // Alternative success return code.
-        sLogger.Warning("Graphics pipeline compile required extension.");
-    sLogger.Info("Created graphics pipeline.");
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create graphics pipeline!");
+    VkResultHandler::InterpretSuccess(result, "Created graphics pipeline.");
 
     // Deletes the shader modules. These should be at the end of the function.
     vkDestroyShaderModule(m_logicalDevice, fragShaderModule, VK_NULL_HANDLE);
@@ -944,11 +891,106 @@ void VkRenderer::CreateFramebuffers() {
         };
 
         // Creates the framebuffer.
-        if (vkCreateFramebuffer(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_swapChainFramebuffers[i]) != VK_SUCCESS)
-            throw sLogger.RuntimeError("Failed to create framebuffer!");
+        VkResult result = vkCreateFramebuffer(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_swapChainFramebuffers[i]);
+        if (VkResultHandler::TestIfError(result))
+            throw VkResultHandler::InterpretError(result, "Failed to create framebuffer!");
     }
 
     sLogger.Info("Created framebuffers.");
+}
+
+void VkRenderer::CreateCommandPool() {
+    QueueFamilyIndices queueFamilyIndices = GetQueueFamilies(m_physicalDevice);
+
+    // Create the info struct for the command pool.
+    VkCommandPoolCreateInfo poolInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = queueFamilyIndices.m_graphics.value()
+    };
+
+    VkResult result = vkCreateCommandPool(m_logicalDevice, &poolInfo, VK_NULL_HANDLE, &m_commandPool);
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create command pool!");
+    VkResultHandler::InterpretSuccess(result, "Created command pool.");
+}
+
+void VkRenderer::CreateCommandBuffer() {
+    // Create the allocate info struct for the command pool.
+    VkCommandBufferAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = m_commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+
+    VkResult result = vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffer);
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to create command buffer!");
+    VkResultHandler::InterpretSuccess(result, "Created command buffer.");
+}
+
+void VkRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    // Specify details about the usage of the command buffer.
+    VkCommandBufferBeginInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = 0,
+        .pInheritanceInfo = VK_NULL_HANDLE
+    };
+
+    VkResult result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to begin recording command buffer!");
+    
+    // Clear color before drawing.
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    
+    // Start drawing by beginning a render pass.
+    VkRenderPassBeginInfo renderPassInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = m_renderPass,
+        .framebuffer = m_swapChainFramebuffers[imageIndex],
+        .clearValueCount = 1,
+        .pClearValues = &clearColor
+    };
+
+    // Keep the render area the same size as the images for the best performance.
+    renderPassInfo.renderArea.offset = {0, 0};
+    renderPassInfo.renderArea.extent = m_swapChainExtent;
+
+    vkCmdBeginRenderPass(m_commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Bind the grpahics pipeline.
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+
+    // Set the dynamic viewport and scissor.
+    VkViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(m_swapChainExtent.width),
+        .height = static_cast<float>(m_swapChainExtent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = m_swapChainExtent
+    };
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+    // Draw the triangle.
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    // End the render pass.
+    vkCmdEndRenderPass(commandBuffer);
+
+    // Finish recording the command buffer.
+    result = vkEndCommandBuffer(commandBuffer);
+    if (VkResultHandler::TestIfError(result))
+        throw VkResultHandler::InterpretError(result, "Failed to record command buffer!");
+    VkResultHandler::InterpretSuccess(result, "Recorded to command buffer.");
 }
 
 }

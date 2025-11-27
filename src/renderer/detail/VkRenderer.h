@@ -85,9 +85,6 @@ private:
     // Checks if the validation layers are supported.
     static bool CheckValidationLayerSupport();
 
-    // Interprets a VkResult error.
-    static std::runtime_error InterpretVkError(VkResult result, const char* error);
-
     // Debug callback function used when validation layers log information.
     static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
@@ -176,6 +173,15 @@ private:
     // Creates all of the framebuffers for the swap chain.
     void CreateFramebuffers();
 
+    // Creates the command pool.
+    void CreateCommandPool();
+
+    // Creastes the command buffer.
+    void CreateCommandBuffer();
+
+    // Writes commands to execute into the command buffer.
+    void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
@@ -192,6 +198,8 @@ private:
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
+    VkCommandPool m_commandPool = VK_NULL_HANDLE;
+    VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
 };
 
 }
