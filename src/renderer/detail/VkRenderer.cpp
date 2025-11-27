@@ -94,6 +94,8 @@ void VkRenderer::Initialize() {
 }
 
 void VkRenderer::Destroy() {
+    vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, VK_NULL_HANDLE);
+
     vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, VK_NULL_HANDLE);
 
     vkDestroyRenderPass(m_logicalDevice, m_renderPass, VK_NULL_HANDLE);
@@ -468,6 +470,7 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Shader module - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateShaderModule.html
     // Pipeline layout - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreatePipelineLayout.html
     // Render pass - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateRenderPass.html
+    // Graphics pipeline - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateGraphicsPipelines.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -801,6 +804,15 @@ void VkRenderer::CreateTestGraphicsPipeline() {
         .primitiveRestartEnable = VK_FALSE
     };
 
+    // Configure the viewport state. Ensure it is dynamic.
+    VkPipelineViewportStateCreateInfo viewportStateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1, // Only need 1 viewport and scissor.
+        .pViewports = VK_NULL_HANDLE,
+        .scissorCount = 1,
+        .pScissors = VK_NULL_HANDLE
+    };
+
     // Configure the rasterizer.
     VkPipelineRasterizationStateCreateInfo rasterizerInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -847,17 +859,17 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     };
 
     // Configure global color blending rules that applies to all frame buffers.
-    VkPipelineColorBlendStateCreateInfo ColorBlendingInfo = {
+    VkPipelineColorBlendStateCreateInfo colorBlendingInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .logicOpEnable = VK_FALSE,
         .logicOp = VK_LOGIC_OP_COPY,
         .attachmentCount = 1,
         .pAttachments = &colorBlendAttachmentInfo
     };
-    ColorBlendingInfo.blendConstants[0] = 0.0f;
-    ColorBlendingInfo.blendConstants[1] = 0.0f;
-    ColorBlendingInfo.blendConstants[2] = 0.0f;
-    ColorBlendingInfo.blendConstants[3] = 0.0f;
+    colorBlendingInfo.blendConstants[0] = 0.0f;
+    colorBlendingInfo.blendConstants[1] = 0.0f;
+    colorBlendingInfo.blendConstants[2] = 0.0f;
+    colorBlendingInfo.blendConstants[3] = 0.0f;
 
     // Configure and create pipeline layout.
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
@@ -870,8 +882,35 @@ void VkRenderer::CreateTestGraphicsPipeline() {
 
     result = vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_pipelineLayout);
     if (result != VK_SUCCESS)
-        throw InterpretVkError(result, "Failed to create pipeline layout.");
+        throw InterpretVkError(result, "Failed to create pipeline layout!");
     sLogger.Info("Created pipeline layout.");
+
+    // Create the graphices pipeline.
+    VkGraphicsPipelineCreateInfo pipelineInfo = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = shaderStages,
+        .pVertexInputState = &vertexInputInfo,
+        .pInputAssemblyState = &inputAssemblyInfo,
+        .pViewportState = &viewportStateInfo,
+        .pRasterizationState = &rasterizerInfo,
+        .pMultisampleState = &multisamplingInfo,
+        .pDepthStencilState = VK_NULL_HANDLE,
+        .pColorBlendState = &colorBlendingInfo,
+        .pDynamicState = &dynamicStateInfo,
+        .layout = m_pipelineLayout,
+        .renderPass = m_renderPass,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1
+    };
+
+    result = vkCreateGraphicsPipelines(m_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &m_graphicsPipeline);
+    if (result != VK_SUCCESS && result != VK_PIPELINE_COMPILE_REQUIRED_EXT)
+        throw InterpretVkError(result, "Failed to create graphics pipeline!");
+    if (result == VK_PIPELINE_COMPILE_REQUIRED_EXT) // Alternative success return code.
+        sLogger.Warning("Graphics pipeline compile required extension.");
+    sLogger.Info("Created graphics pipeline.");
 
     // Deletes the shader modules. These should be at the end of the function.
     vkDestroyShaderModule(m_logicalDevice, fragShaderModule, VK_NULL_HANDLE);

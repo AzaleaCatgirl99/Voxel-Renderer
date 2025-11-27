@@ -187,6 +187,7 @@ private:
     std::vector<VkImageView> m_swapChainImageViews;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
 };
 
 }
