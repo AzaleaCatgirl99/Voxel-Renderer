@@ -55,6 +55,9 @@ private:
 #endif
     0;
 
+    // The max number of frames allowed to be in flight at once.
+    static constexpr const uint32_t sMaxFramesInFlight = 2;
+
     // Sets what layers to enable.
     static std::vector<const char*> sLayers;
 
@@ -205,10 +208,13 @@ private:
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
-    VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
-    VkSemaphore m_imageAvailableSemaphore = VK_NULL_HANDLE;
-    VkSemaphore m_renderFinishedSemaphore = VK_NULL_HANDLE;
-    VkFence m_inFlightFence = VK_NULL_HANDLE;
+    uint32_t m_currentFrame = 0;
+
+    VkCommandBuffer m_commandBuffers[sMaxFramesInFlight];
+    VkSemaphore m_imageAvailableSemaphores[sMaxFramesInFlight];
+    VkFence m_inFlightFences[sMaxFramesInFlight];
+
+    std::vector<VkSemaphore> m_renderFinishedSemaphores;
 };
 
 }

@@ -107,9 +107,13 @@ void VkRenderer::Initialize() {
 }
 
 void VkRenderer::Destroy() {
-    vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphore, VK_NULL_HANDLE);
-    vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphore, VK_NULL_HANDLE);
-    vkDestroyFence(m_logicalDevice, m_inFlightFence, VK_NULL_HANDLE);
+    for (size_t i = 0; i < sMaxFramesInFlight; i++) {
+        vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphores[i], VK_NULL_HANDLE);
+        vkDestroyFence(m_logicalDevice, m_inFlightFences[i], VK_NULL_HANDLE);
+    }
+
+    for (size_t i = 0; i < m_swapChainImages.size(); i++)
+        vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphores[i], VK_NULL_HANDLE);
 
     vkDestroyCommandPool(m_logicalDevice, m_commandPool, VK_NULL_HANDLE);
 
@@ -141,26 +145,34 @@ void VkRenderer::UpdateDisplay() {
     // TODO recreate the swap chain.
 }
 
-void VkRenderer::DrawFrame() {
+void VkRenderer::DrawFrame() {    
+    // sLogger.Verbose("\nStarting to draw frame ", m_currentFrame, ": ");
+    // sLogger.Verbose("  Waiting for next frame...");
+
     // Waits for the next frame.
-    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
+    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+    // sLogger.Verbose("  Waited for next frame! Resetting flight fence...");
 
     // Resets the flight fence.
-    vkResetFences(m_logicalDevice, 1, &m_inFlightFence);
+    vkResetFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame]);
+    // sLogger.Verbose("  Resetted flight fence! Getting next image index...");
 
     // Gets the next image index in the swap chain to be used.
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    // sLogger.Verbose("  Got image index! Resetting command buffer...");
 
     // Resets the command buffer.
-    vkResetCommandBuffer(m_commandBuffer, 0);
+    vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
+    // sLogger.Verbose("  Reset command buffer! Recording command buffer...");
 
     // Records the command buffer.
-    RecordCommandBuffer(m_commandBuffer, imageIndex);
+    RecordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
+    // sLogger.Verbose("  Recorded command buffer! Submitting command buffer...");
 
     // Creates the submit info needed to submit the command buffer.
-    VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphore};
-    VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphore};
+    VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame]};
+    VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[imageIndex]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -168,14 +180,15 @@ void VkRenderer::DrawFrame() {
         .pWaitSemaphores = waitSemaphores,
         .pWaitDstStageMask = waitStages,
         .commandBufferCount = 1,
-        .pCommandBuffers = &m_commandBuffer,
+        .pCommandBuffers = &m_commandBuffers[m_currentFrame],
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = signalSemaphores
     };
 
     // Submits the command buffer to the graphics queue.
-    VkResult result = vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence);
+    VkResult result = vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]);
     VkResultHandler::CheckResult(result, "Failed to submit command buffer!");
+    // sLogger.Verbose("  Submitted command buffer! Submitting result...");
 
     // The present info needed for submitting the result to the swap chain.
     VkPresentInfoKHR presentInfo = {
@@ -190,8 +203,13 @@ void VkRenderer::DrawFrame() {
 
     // Submits the image to the swap chain.
     vkQueuePresentKHR(m_presentationQueue, &presentInfo);
+    // sLogger.Verbose("  Submitted result! Incrementing frame...");
 
-    vkQueueWaitIdle(m_presentationQueue); // TODO remove once Princess's chappie is done.
+    // vkQueueWaitIdle(m_presentationQueue); // TODO remove once Princess's chappie is done.
+
+    // Advance to the next frame.
+    m_currentFrame = (m_currentFrame + 1) % sMaxFramesInFlight;
+    // sLogger.Verbose("  Incremented frame! New frame is: ", m_currentFrame);
 }
 
 void VkRenderer::CreateInstance() {
@@ -979,14 +997,16 @@ void VkRenderer::CreateCommandBuffer() {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = m_commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
+        .commandBufferCount = sMaxFramesInFlight
     };
 
-    VkResult result = vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffer);
+    VkResult result = vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffers[m_currentFrame]);
     VkResultHandler::CheckResult(result, "Failed to create command buffer!", "Created command buffer.");
 }
 
 void VkRenderer::CreateSyncObjects() {
+    m_renderFinishedSemaphores.resize(m_swapChainImages.size());
+
     VkSemaphoreCreateInfo semaphoreCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     };
@@ -996,17 +1016,21 @@ void VkRenderer::CreateSyncObjects() {
         .flags = VK_FENCE_CREATE_SIGNALED_BIT
     };
 
-    // Creates the semaphore for the available image.
-    VkResult result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_imageAvailableSemaphore);
-    VkResultHandler::CheckResult(result, "Failed to create image available semaphore!");
+    for (size_t i = 0; i < sMaxFramesInFlight; i++) {
+        // Creates the semaphore for the available image.
+        VkResult result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_imageAvailableSemaphores[i]);
+        VkResultHandler::CheckResult(result, "Failed to create image available semaphore!");
 
-    // Creates the semaphore for the render finished.
-    result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_renderFinishedSemaphore);
-    VkResultHandler::CheckResult(result, "Failed to create render finished semaphore!");
+        // Creates the fence for in flight.
+        result = vkCreateFence(m_logicalDevice, &fenceCreateInfo, VK_NULL_HANDLE, &m_inFlightFences[i]);
+        VkResultHandler::CheckResult(result, "Failed to create in flight fence!");
+    }
 
-    // Creates the fence for in flight.
-    result = vkCreateFence(m_logicalDevice, &fenceCreateInfo, VK_NULL_HANDLE, &m_inFlightFence);
-    VkResultHandler::CheckResult(result, "Failed to create in flight fence!");
+    for (size_t i = 0; i < m_swapChainImages.size(); i++) {
+        // Creates the semaphore for the render finished.
+        VkResult result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_renderFinishedSemaphores[i]);
+        VkResultHandler::CheckResult(result, "Failed to create render finished semaphore!");
+    }
 
     sLogger.Info("Created sync objects.");
 }
