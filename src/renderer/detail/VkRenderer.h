@@ -173,6 +173,9 @@ private:
     // TODO replace with pipeline factory utility.
     void CreateTestGraphicsPipeline();
 
+    // Creates all of the framebuffers for the swap chain.
+    void CreateFramebuffers();
+
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
@@ -188,6 +191,7 @@ private:
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
+    std::vector<VkFramebuffer> m_swapChainFramebuffers;
 };
 
 }

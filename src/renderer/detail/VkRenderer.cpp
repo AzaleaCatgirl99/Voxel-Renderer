@@ -91,9 +91,15 @@ void VkRenderer::Initialize() {
 
     // Creates the test graphics pipeline.
     CreateTestGraphicsPipeline();
+
+    // Creates the framebuffers for the swap chain.
+    CreateFramebuffers();
 }
 
 void VkRenderer::Destroy() {
+    for (auto framebuffer : m_swapChainFramebuffers)
+        vkDestroyFramebuffer(m_logicalDevice, framebuffer, VK_NULL_HANDLE);
+
     vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, VK_NULL_HANDLE);
 
     vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, VK_NULL_HANDLE);
@@ -471,6 +477,7 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Pipeline layout - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreatePipelineLayout.html
     // Render pass - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateRenderPass.html
     // Graphics pipeline - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateGraphicsPipelines.html
+    // Framebuffer - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateFramebuffer.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -915,6 +922,33 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     // Deletes the shader modules. These should be at the end of the function.
     vkDestroyShaderModule(m_logicalDevice, fragShaderModule, VK_NULL_HANDLE);
     vkDestroyShaderModule(m_logicalDevice, vertShaderModule, VK_NULL_HANDLE);
+}
+
+void VkRenderer::CreateFramebuffers() {
+    m_swapChainFramebuffers.resize(m_swapChainImageViews.size());
+
+    for (size_t i = 0; i < m_swapChainImageViews.size(); i++) {
+        VkImageView attachments[] = {
+            m_swapChainImageViews[i]
+        };
+
+        // The create info used by the framebuffer.
+        VkFramebufferCreateInfo createInfo = {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = m_renderPass,
+            .attachmentCount = 1,
+            .pAttachments = attachments,
+            .width = m_swapChainExtent.width,
+            .height = m_swapChainExtent.height,
+            .layers = 1
+        };
+
+        // Creates the framebuffer.
+        if (vkCreateFramebuffer(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_swapChainFramebuffers[i]) != VK_SUCCESS)
+            throw sLogger.RuntimeError("Failed to create framebuffer!");
+    }
+
+    sLogger.Info("Created framebuffers.");
 }
 
 }
