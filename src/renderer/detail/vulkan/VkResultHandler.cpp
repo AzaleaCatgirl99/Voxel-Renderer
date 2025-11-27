@@ -1,6 +1,5 @@
 #include "renderer/detail/vulkan/VkResultHandler.h"
 
-#include <SDL3/SDL_platform.h>
 #include <string>
 
 // Fixes missing macros for Apple devices.
@@ -14,7 +13,7 @@ namespace detail {
 Logger VkResultHandler::sLogger = Logger("VkResultHandler");
 
 // https://docs.vulkan.org/refpages/latest/refpages/source/VkResult.html
-const std::flat_map<VkResult, const char*> VkResultHandler::sErrorStrings = {
+const std::flat_map<VkResult, const char*> VkResultHandler::sResultStrings = {
         {VK_ERROR_OUT_OF_HOST_MEMORY, "A host memory allocation has failed."},
         {VK_ERROR_OUT_OF_DEVICE_MEMORY, "A device memory allocation has failed."},
         {VK_ERROR_INITIALIZATION_FAILED, "Initialization of an object could not be completed for implementation-specific reasons."},
@@ -52,10 +51,6 @@ const std::flat_map<VkResult, const char*> VkResultHandler::sErrorStrings = {
 #ifndef SDL_PLATFORM_APPLE
         {VK_ERROR_NOT_ENOUGH_SPACE_KHR, "The application did not provide enough space to return all the required data."},
 #endif
-        };
-
-// https://docs.vulkan.org/refpages/latest/refpages/source/VkResult.html
-const std::flat_map<VkResult, const char*> VkResultHandler::sSuccessStrings = {
         {VK_NOT_READY, "A fence or query has not yet completed."},
         {VK_TIMEOUT, "A wait operation has not completed in the specified time."},
         {VK_EVENT_SET, "An event is signaled."},
@@ -73,44 +68,28 @@ const std::flat_map<VkResult, const char*> VkResultHandler::sSuccessStrings = {
 #endif
         };
 
-std::runtime_error VkResultHandler::InterpretError(VkResult result, const char* errorMessage) {
-    return sLogger.RuntimeError(errorMessage, " ", GetErrorString(result));
-}
-
-void VkResultHandler::InterpretSuccess(VkResult result, const char* successMessage) {
-    if (result == VK_SUCCESS)
-        sLogger.Info(successMessage); // Send like normal for VK_SUCCESS.
-    else
-        sLogger.Warning(successMessage, " BUT: ", GetSuccessString(result)); // Warn for other cases.
-}
-
-bool VkResultHandler::TestIfError(const VkResult result) {
-    // Compiler can optimize switch statements like these very quickly + no data structure needed.
-    switch (result) {
-        case
-            VK_SUCCESS: VK_NOT_READY: VK_TIMEOUT: VK_EVENT_SET: VK_EVENT_RESET: VK_INCOMPLETE: VK_SUBOPTIMAL_KHR: 
-            VK_PIPELINE_COMPILE_REQUIRED: VK_THREAD_IDLE_KHR: VK_THREAD_DONE_KHR: VK_OPERATION_DEFERRED_KHR: 
-            VK_OPERATION_NOT_DEFERRED_KHR: VK_INCOMPATIBLE_SHADER_BINARY_EXT: VK_PIPELINE_BINARY_MISSING_KHR:
-            return false;
-        default:
-            return true; // Assume error for unknown codes.
+void VkResultHandler::CheckResult(const VkResult result, const char* error, std::optional<const char*> success) {
+    if (result == VK_SUCCESS) {
+        if (success.has_value())
+            sLogger.Info(success.value());
+        return;
     }
+
+    if (IsSuccess(result)) {
+        if (success.has_value())
+            sLogger.Warning(success.value(), " BUT: ", GetResultString(result)); // Warn for other cases.
+        return;
+    }
+
+    throw sLogger.RuntimeError(error, " ", GetResultString(result));
 }
 
-std::string VkResultHandler::GetErrorString(const VkResult result) {
-    if (sErrorStrings.at(result) != nullptr)
-        return sErrorStrings.at(result);
+std::string VkResultHandler::GetResultString(const VkResult result) {
+    if (sResultStrings.at(result) != nullptr)
+        return sResultStrings.at(result);
 
     // If the flat_map does not hold the result, then output the code in integer form.
-    return "Error code '" + std::to_string(result) + "'";
-};
-
-std::string VkResultHandler::GetSuccessString(const VkResult result) {
-    if (sSuccessStrings.at(result) != nullptr)
-        return sSuccessStrings.at(result);
-
-    // If the flat_map does not hold the result, then output the code in integer form.
-    return "Success code '" + std::to_string(result) + "'";
+    return "Result code '" + std::to_string(result) + "'";
 };
 
 }

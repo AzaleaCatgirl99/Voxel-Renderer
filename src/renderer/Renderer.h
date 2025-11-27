@@ -26,6 +26,13 @@ public:
 
         sContext->UpdateDisplay();
     }
+
+    // Draws the frame.
+    static constexpr void DrawFrame() {
+        assert(sContext != nullptr);
+
+        sContext->DrawFrame();
+    }
 private:
     static detail::IRenderer* sContext;
 };

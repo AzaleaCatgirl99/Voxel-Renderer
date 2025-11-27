@@ -95,9 +95,22 @@ void VkRenderer::Initialize() {
 
     // Creates the framebuffers for the swap chain.
     CreateFramebuffers();
+
+    // Creates the command pool.
+    CreateCommandPool();
+
+    // Creates the command buffer.
+    CreateCommandBuffer();
+
+    // Creates the objects needed for syncing the frames.
+    CreateSyncObjects();
 }
 
 void VkRenderer::Destroy() {
+    vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphore, VK_NULL_HANDLE);
+    vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphore, VK_NULL_HANDLE);
+    vkDestroyFence(m_logicalDevice, m_inFlightFence, VK_NULL_HANDLE);
+
     vkDestroyCommandPool(m_logicalDevice, m_commandPool, VK_NULL_HANDLE);
 
     for (auto framebuffer : m_swapChainFramebuffers)
@@ -125,7 +138,60 @@ void VkRenderer::Destroy() {
 }
 
 void VkRenderer::UpdateDisplay() {
-    // TODO make surface stuffies.
+    // TODO recreate the swap chain.
+}
+
+void VkRenderer::DrawFrame() {
+    // Waits for the next frame.
+    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
+
+    // Resets the flight fence.
+    vkResetFences(m_logicalDevice, 1, &m_inFlightFence);
+
+    // Gets the next image index in the swap chain to be used.
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    // Resets the command buffer.
+    vkResetCommandBuffer(m_commandBuffer, 0);
+
+    // Records the command buffer.
+    RecordCommandBuffer(m_commandBuffer, imageIndex);
+
+    // Creates the submit info needed to submit the command buffer.
+    VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphore};
+    VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphore};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = waitSemaphores,
+        .pWaitDstStageMask = waitStages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &m_commandBuffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = signalSemaphores
+    };
+
+    // Submits the command buffer to the graphics queue.
+    VkResult result = vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence);
+    VkResultHandler::CheckResult(result, "Failed to submit command buffer!");
+
+    // The present info needed for submitting the result to the swap chain.
+    VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = signalSemaphores,
+        .swapchainCount = 1,
+        .pSwapchains = &m_swapChain,
+        .pImageIndices = &imageIndex,
+        .pResults = VK_NULL_HANDLE
+    };
+
+    // Submits the image to the swap chain.
+    vkQueuePresentKHR(m_presentationQueue, &presentInfo);
+
+    vkQueueWaitIdle(m_presentationQueue); // TODO remove once Princess's chappie is done.
 }
 
 void VkRenderer::CreateInstance() {
@@ -137,9 +203,7 @@ void VkRenderer::CreateInstance() {
 
     // Create the Vulkan instance.
     VkResult result = vkCreateInstance(&sCreateInfo, VK_NULL_HANDLE, &m_instance);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create Vulkan instance!");
-    VkResultHandler::InterpretSuccess(result, "Created Vulkan instance.");
+    VkResultHandler::CheckResult(result, "Failed to create Vulkan instance!", "Created Vulkan instance.");
 }
 
 void VkRenderer::SetupInstanceInfo() {
@@ -263,9 +327,7 @@ void VkRenderer::CreateDebugMessenger() {
     if (!sEnableValidationLayers) return;
 
     VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &m_debugMessenger);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create debug messenger!");
-    VkResultHandler::InterpretSuccess(result, "Created debug messenger.");
+    VkResultHandler::CheckResult(result, "Failed to create debug messenger!", "Created debug messenger.");
 }
 
 VkResult VkRenderer::CreateDebugUtilsMessengerEXT(
@@ -452,9 +514,7 @@ void VkRenderer::CreateLogicalDevice() {
 
     // Creates the logical device.
     VkResult result = vkCreateDevice(m_physicalDevice, &createInfo, VK_NULL_HANDLE, &m_logicalDevice);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create logical device!");
-    VkResultHandler::InterpretSuccess(result, "Created logical device.");
+    VkResultHandler::CheckResult(result, "Failed to create logical device!", "Created logical device.");
 
     // Gets the queue handles.
     vkGetDeviceQueue(m_logicalDevice, indices.m_graphics.value(), 0, &m_graphicsQueue);
@@ -595,9 +655,7 @@ void VkRenderer::CreateSwapChain() {
 
     // Create the swap chain.
     VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, VK_NULL_HANDLE, &m_swapChain);
-    if (VkResultHandler::TestIfError(result))
-        VkResultHandler::InterpretError(result, "Failed to create swap chain!");
-    VkResultHandler::InterpretSuccess(result, "Created swap chain.");
+    VkResultHandler::CheckResult(result, "Failed to create swap chain!", "Created swap chain.");
 
     // Load the swap chain images.
     vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, VK_NULL_HANDLE);
@@ -635,8 +693,7 @@ void VkRenderer::CreateImageViews() {
 
         // Create the image view.
         VkResult result = vkCreateImageView(m_logicalDevice, &imageViewCreateInfo, VK_NULL_HANDLE, &m_swapChainImageViews[i]);
-        if (VkResultHandler::TestIfError(result))
-            throw VkResultHandler::InterpretError(result, "Failed to create image view!");
+        VkResultHandler::CheckResult(result, "Failed to create image view!");
     }
     sLogger.Info("Created image views.");
 }
@@ -667,20 +724,30 @@ void VkRenderer::CreateRenderPass() {
         .pColorAttachments = &colorAttachmentRef
     };
 
+    // The dependency for the subpass.
+    VkSubpassDependency dependency = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    };
+
     // The main create info for the render pass.
     VkRenderPassCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &colorAttachment,
         .subpassCount = 1,
-        .pSubpasses = &subpass
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &dependency
     };
 
     // Creates the render pass.
     VkResult result = vkCreateRenderPass(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_renderPass);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create render pass!");
-    VkResultHandler::InterpretSuccess(result, "Created render pass.");
+    VkResultHandler::CheckResult(result, "Failed to create render pass!", "Created render pass.");
 }
 
 void VkRenderer::CreateTestGraphicsPipeline() {
@@ -699,8 +766,7 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     // Creates vertex shader module.
     VkShaderModule vertShaderModule;
     VkResult result = vkCreateShaderModule(m_logicalDevice, &vertShaderCreateInfo, VK_NULL_HANDLE, &vertShaderModule);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create vertex shader module!");
+    VkResultHandler::CheckResult(result, "Failed to create vertex shader module!");
 
     // Creates the fragment shader info.
     VkShaderModuleCreateInfo fragShaderCreateInfo = {
@@ -712,8 +778,7 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     // Creates fragment shader module.
     VkShaderModule fragShaderModule;
     result = vkCreateShaderModule(m_logicalDevice, &fragShaderCreateInfo, VK_NULL_HANDLE, &fragShaderModule);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create fragment shader module!");
+    VkResultHandler::CheckResult(result, "Failed to create fragment shader module!");
 
     // Creates the vertex shader stage info.
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {
@@ -837,9 +902,7 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     };
 
     result = vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_pipelineLayout);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create pipeline layout!");
-    sLogger.Info("Created pipeline layout.");
+    VkResultHandler::CheckResult(result, "Failed to create pipeline layout!", "Created pipeline layout.");
 
     // Create the graphices pipeline.
     VkGraphicsPipelineCreateInfo pipelineInfo = {
@@ -862,9 +925,7 @@ void VkRenderer::CreateTestGraphicsPipeline() {
     };
 
     result = vkCreateGraphicsPipelines(m_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &m_graphicsPipeline);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create graphics pipeline!");
-    VkResultHandler::InterpretSuccess(result, "Created graphics pipeline.");
+    VkResultHandler::CheckResult(result, "Failed to create graphics pipeline!", "Created graphics pipeline.");
 
     // Deletes the shader modules. These should be at the end of the function.
     vkDestroyShaderModule(m_logicalDevice, fragShaderModule, VK_NULL_HANDLE);
@@ -892,8 +953,7 @@ void VkRenderer::CreateFramebuffers() {
 
         // Creates the framebuffer.
         VkResult result = vkCreateFramebuffer(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_swapChainFramebuffers[i]);
-        if (VkResultHandler::TestIfError(result))
-            throw VkResultHandler::InterpretError(result, "Failed to create framebuffer!");
+        VkResultHandler::CheckResult(result, "Failed to create framebuffer!");
     }
 
     sLogger.Info("Created framebuffers.");
@@ -910,9 +970,7 @@ void VkRenderer::CreateCommandPool() {
     };
 
     VkResult result = vkCreateCommandPool(m_logicalDevice, &poolInfo, VK_NULL_HANDLE, &m_commandPool);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create command pool!");
-    VkResultHandler::InterpretSuccess(result, "Created command pool.");
+    VkResultHandler::CheckResult(result, "Failed to create command pool!", "Created command pool.");
 }
 
 void VkRenderer::CreateCommandBuffer() {
@@ -925,9 +983,32 @@ void VkRenderer::CreateCommandBuffer() {
     };
 
     VkResult result = vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffer);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to create command buffer!");
-    VkResultHandler::InterpretSuccess(result, "Created command buffer.");
+    VkResultHandler::CheckResult(result, "Failed to create command buffer!", "Created command buffer.");
+}
+
+void VkRenderer::CreateSyncObjects() {
+    VkSemaphoreCreateInfo semaphoreCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+    };
+
+    VkFenceCreateInfo fenceCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT
+    };
+
+    // Creates the semaphore for the available image.
+    VkResult result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_imageAvailableSemaphore);
+    VkResultHandler::CheckResult(result, "Failed to create image available semaphore!");
+
+    // Creates the semaphore for the render finished.
+    result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_renderFinishedSemaphore);
+    VkResultHandler::CheckResult(result, "Failed to create render finished semaphore!");
+
+    // Creates the fence for in flight.
+    result = vkCreateFence(m_logicalDevice, &fenceCreateInfo, VK_NULL_HANDLE, &m_inFlightFence);
+    VkResultHandler::CheckResult(result, "Failed to create in flight fence!");
+
+    sLogger.Info("Created sync objects.");
 }
 
 void VkRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
@@ -939,8 +1020,7 @@ void VkRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t ima
     };
 
     VkResult result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to begin recording command buffer!");
+    VkResultHandler::CheckResult(result, "Failed to begin recording command buffer!");
     
     // Clear color before drawing.
     VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
@@ -988,9 +1068,7 @@ void VkRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t ima
 
     // Finish recording the command buffer.
     result = vkEndCommandBuffer(commandBuffer);
-    if (VkResultHandler::TestIfError(result))
-        throw VkResultHandler::InterpretError(result, "Failed to record command buffer!");
-    VkResultHandler::InterpretSuccess(result, "Recorded to command buffer.");
+    VkResultHandler::CheckResult(result, "Failed to record command buffer!");
 }
 
 }

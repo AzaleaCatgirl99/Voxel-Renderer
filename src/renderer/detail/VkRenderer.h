@@ -28,6 +28,9 @@ public:
 
     // Updates the Vulkan surface.
     virtual void UpdateDisplay() override;
+
+    // Draws the frame.
+    virtual void DrawFrame() override;
 private:
     // Determines whether to use validation layers depending on if NDEBUG (no debugging) flag is enabled.
 #ifdef VXL_DEBUG
@@ -179,6 +182,9 @@ private:
     // Creastes the command buffer.
     void CreateCommandBuffer();
 
+    // Creates the objects used for syncing the frames.
+    void CreateSyncObjects();
+
     // Writes commands to execute into the command buffer.
     void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
@@ -200,6 +206,9 @@ private:
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
+    VkSemaphore m_imageAvailableSemaphore = VK_NULL_HANDLE;
+    VkSemaphore m_renderFinishedSemaphore = VK_NULL_HANDLE;
+    VkFence m_inFlightFence = VK_NULL_HANDLE;
 };
 
 }

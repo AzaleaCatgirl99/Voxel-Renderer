@@ -41,6 +41,9 @@ void App::MainLoop() {
             break;
         }
     }
+
+    Renderer::DrawFrame();
+    Renderer::UpdateDisplay();
 }
 
 void App::Cleanup() {
