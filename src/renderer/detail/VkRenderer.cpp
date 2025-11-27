@@ -86,12 +86,17 @@ void VkRenderer::Initialize() {
     // Create the image views for the swap chain.
     CreateImageViews();
 
+    // Creates the render pass.
+    CreateRenderPass();
+
     // Creates the test graphics pipeline.
     CreateTestGraphicsPipeline();
 }
 
 void VkRenderer::Destroy() {
     vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, VK_NULL_HANDLE);
+
+    vkDestroyRenderPass(m_logicalDevice, m_renderPass, VK_NULL_HANDLE);
 
     for (auto imageView : m_swapChainImageViews)
         vkDestroyImageView(m_logicalDevice, imageView, VK_NULL_HANDLE);
@@ -462,6 +467,7 @@ std::runtime_error VkRenderer::InterpretVkError(VkResult result, const char* gen
     // Image view - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateImageView.html
     // Shader module - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateShaderModule.html
     // Pipeline layout - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreatePipelineLayout.html
+    // Render pass - https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateRenderPass.html
     switch(result) {
         case VK_ERROR_EXTENSION_NOT_PRESENT:
             return sLogger.RuntimeError(genericError, " Extension not present.");
@@ -677,7 +683,45 @@ void VkRenderer::CreateImageViews() {
 }
 
 void VkRenderer::CreateRenderPass() {
+    // Attachment used for the color buffer.
+    VkAttachmentDescription colorAttachment = {
+        .format = m_swapChainImageFormat,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
 
+    // Reference for the color attachment.
+    VkAttachmentReference colorAttachmentRef = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    // The main subpass for the render pass.
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef
+    };
+
+    // The main create info for the render pass.
+    VkRenderPassCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    // Creates the render pass.
+    if (vkCreateRenderPass(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_renderPass) != VK_SUCCESS)
+        throw sLogger.RuntimeError("Failed to create render pass!");
+
+    sLogger.Info("Created render pass.");
 }
 
 void VkRenderer::CreateTestGraphicsPipeline() {
@@ -755,31 +799,6 @@ void VkRenderer::CreateTestGraphicsPipeline() {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .primitiveRestartEnable = VK_FALSE
-    };
-
-    // Configure the scissor.
-    VkRect2D scissor = {
-        .offset = {0, 0},
-        .extent = m_swapChainExtent
-    };
-
-    // Configure the viewport.
-    VkViewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = (float) m_swapChainExtent.width,
-        .height = (float) m_swapChainExtent.height,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-    };
-
-    // Configure the viewport state.
-    VkPipelineViewportStateCreateInfo viewportStateInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1, // Only need 1 viewport and state.
-        .pViewports = &viewport,
-        .scissorCount = 1,
-        .pScissors = &scissor
     };
 
     // Configure the rasterizer.
