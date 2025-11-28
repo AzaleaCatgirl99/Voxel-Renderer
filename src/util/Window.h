@@ -27,80 +27,81 @@ struct DisplayMode final {
 // Utility for handling window management.
 class Window final {
 public:
-    Window(const char* title, const DisplayMode& mode, eRenderPipeline pipeline);
+    static void Create(const char* title, const DisplayMode& mode, eRenderPipeline pipeline);
 
     // Gets the window width.
-    constexpr const int Width() const {
+    static constexpr const int Width() {
         int width = 0;
-        SDL_GetWindowSize(m_pHandler, &width, nullptr);
+        SDL_GetWindowSize(sContext, &width, nullptr);
         return width;
     }
 
     // Gets the window height.
-    constexpr const int Height() const {
+    static constexpr const int Height() {
         int height = 0;
-        SDL_GetWindowSize(m_pHandler, nullptr, &height);
+        SDL_GetWindowSize(sContext, nullptr, &height);
         return height;
     }
 
     // Gets the window width with the DPI.
-    constexpr const int DisplayWidth() const {
+    static constexpr const int DisplayWidth() {
         return (int)(Width() * DPIScale());
     }
 
     // Gets the window height with the DPI.
-    constexpr const int DisplayHeight() const {
+    static constexpr const int DisplayHeight() {
         return (int)(Height() * DPIScale());
     }
 
     // Gets the scale for the DPI.
-    constexpr const float DPIScale() const {
-        return SDL_GetWindowDisplayScale(m_pHandler);
+    static constexpr const float DPIScale() {
+        return SDL_GetWindowDisplayScale(sContext);
     }
 
     // Gets the window's aspect ratio.
-    constexpr const float ApsectRatio() const {
+    static constexpr const float ApsectRatio() {
         float width = 0.0f, height = 0.0f;
-        SDL_GetWindowAspectRatio(m_pHandler, &width, &height);
+        SDL_GetWindowAspectRatio(sContext, &width, &height);
         return width / height;
     }
 
     // Gets the render pipeline for the window.
-    constexpr const eRenderPipeline& Pipeline() const noexcept {
-        return m_ePipeline;
+    static constexpr const eRenderPipeline& Pipeline() noexcept {
+        return sPipeline;
     }
 
     // Sets the window to fullscreen.
-    constexpr void SetFullscreen(bool toggle) {
-        SDL_SetWindowFullscreen(m_pHandler, toggle);
+    static constexpr void SetFullscreen(bool toggle) {
+        SDL_SetWindowFullscreen(sContext, toggle);
     }
 
     // Sets the window's title.
-    constexpr void SetTitle(const char* title) {
-        SDL_SetWindowTitle(m_pHandler, title);
+    static constexpr void SetTitle(const char* title) {
+        SDL_SetWindowTitle(sContext, title);
     }
 
     // Destroys the window.
-    constexpr void Destroy() {
-        SDL_DestroyWindow(m_pHandler);
+    static constexpr void Destroy() {
+        SDL_DestroyWindow(sContext);
         SDL_Quit();
     }
 
     // Gets the current SDL event.
-    constexpr const SDL_Event* GetEvent() const noexcept {
-        return &m_uEvent;
+    static constexpr const SDL_Event* GetEvent() noexcept {
+        return &sEvent;
     }
 
     // Polls the current SDL event.
-    constexpr bool PollEvent() {
-        return SDL_PollEvent(&m_uEvent);
+    static constexpr bool PollEvent() {
+        return SDL_PollEvent(&sEvent);
     }
 private:
+    Window() = default;
+
     friend detail::VkRenderer;
 
+    static SDL_Window* sContext;
+    static SDL_Event sEvent;
+    static eRenderPipeline sPipeline;
     static Logger sLogger;
-
-    SDL_Window* m_pHandler = nullptr;
-    SDL_Event m_uEvent;
-    eRenderPipeline m_ePipeline;
 };

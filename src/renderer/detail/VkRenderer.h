@@ -1,12 +1,15 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <flat_map>
 #include <vulkan/vulkan.h>
+#include "renderer/pipeline/GraphicsPipeline.h"
 #include "util/Constants.h"
 #include "util/Features.h"
 #include "util/Logger.h"
@@ -17,7 +20,7 @@ namespace detail {
 // Renderer implementation that uses Vulkan.
 class VkRenderer : public IRenderer {
 public:
-    constexpr VkRenderer(Window* window, const Properties& properties) noexcept : IRenderer(window, properties) {
+    constexpr VkRenderer(const Properties& properties) noexcept : IRenderer(properties) {
     }
 
     // Initializes the Vulkan renderer.
@@ -29,8 +32,20 @@ public:
     // Updates the Vulkan surface.
     virtual void UpdateDisplay() override;
 
-    // Draws the frame.
-    virtual void DrawFrame() override;
+    // Begins drawing the frame.
+    virtual void BeginDrawFrame() override;
+
+    // Ends drawing the frame.
+    virtual void EndDrawFrame() override;
+
+    // Registers a pipeline to be used.
+    virtual void RegisterPipeline(const GraphicsPipeline& pipeline) override;
+
+    // Tells the renderer to bind a pipeline when recording the command buffer.
+    virtual void CmdBindPipeline(const GraphicsPipeline& pipeline) override;
+
+    // Tells the renderer to draw when recording the command buffer.
+    virtual void CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) override;
 private:
     // Determines whether to use validation layers depending on if NDEBUG (no debugging) flag is enabled.
 #ifdef VXL_DEBUG
@@ -69,6 +84,15 @@ private:
 
     // Map for getting the Vulkan present mode from the render swap interval.
     static const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
+
+    // Map for getting the Vulkan blend factor.
+    static const std::flat_map<eRenderBlendFactor, VkBlendFactor> sBlendFactors;
+
+    // Map for getting the Vulkan polygon modes.
+    static const std::flat_map<eRenderPolygonMode, VkPolygonMode> sPolygonModes;
+
+    // Map for getting the Vulkan cull modes.
+    static const std::flat_map<eRenderCullMode, VkCullModeFlags> sCullModes;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;
@@ -172,10 +196,6 @@ private:
     // Creates the render pass.
     void CreateRenderPass();
 
-    // Creates the graphics pipeline used for testing.
-    // TODO replace with pipeline factory utility.
-    void CreateTestGraphicsPipeline();
-
     // Creates all of the framebuffers for the swap chain.
     void CreateFramebuffers();
 
@@ -188,8 +208,19 @@ private:
     // Creates the objects used for syncing the frames.
     void CreateSyncObjects();
 
-    // Writes commands to execute into the command buffer.
-    void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    // Begins writing commands to execute into the command buffer.
+    void BeginRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
+    // Ends writing commands to execute into the command buffer.
+    void EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
+    // Struct to store draw command data.
+    struct DrawCmdData {
+        uint32_t m_vertexCount = 0;
+        uint32_t m_instanceCount = 0;
+        uint32_t m_firstVertex = 0;
+        uint32_t m_firstInstance = 0;
+    };
 
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
@@ -204,8 +235,6 @@ private:
     VkExtent2D m_swapChainExtent;
     std::vector<VkImageView> m_swapChainImageViews;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
-    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     uint32_t m_currentFrame = 0;
@@ -215,6 +244,10 @@ private:
     VkFence m_inFlightFences[sMaxFramesInFlight];
 
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
+
+    std::map<GraphicsPipeline, VkPipeline> m_pipelines;
+    std::map<GraphicsPipeline, VkPipelineLayout> m_pipelineLayouts;
+    uint32_t m_imageIndex = 0;
 };
 
 }

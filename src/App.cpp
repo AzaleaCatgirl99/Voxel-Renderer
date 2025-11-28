@@ -1,10 +1,16 @@
 #include "App.h"
 
 #include "renderer/Renderer.h"
+#include "renderer/pipeline/GraphicsPipeline.h"
+#include "util/Constants.h"
 #include "util/Window.h"
 #include <iostream>
 
-Window* App::sWindow = nullptr;
+static const GraphicsPipeline sTestPipeline = GraphicsPipeline("test", "test_vert.spv", "test_frag.spv")
+                            // .PolygonMode(RENDER_POLYGON_MODE_LINE)
+                            .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
+                            .CullMode(RENDER_CULL_MODE_BACK);
+
 bool App::sRunning = true;
 
 void App::Run() {
@@ -26,29 +32,38 @@ void App::Init() {
 		.m_minHeight = 580
     };
 
-    sWindow = new Window("Voxel Renderer", mode, RENDER_PIPELINE_VULKAN);
+    Window::Create("Voxel Renderer", mode, RENDER_PIPELINE_VULKAN);
 
-    Renderer::Settings rendererSettings;
+    Renderer::Settings rendererSettings = {
+        .m_defaultSwapInterval = RENDER_SWAP_INTERVAL_VSYNC
+    };
 
-    Renderer::CreateContext(sWindow, rendererSettings);
+    Renderer::CreateContext(rendererSettings);
+
+    Renderer::RegisterPipeline(sTestPipeline);
 }
 
 void App::MainLoop() {
-    while (sWindow->PollEvent()) {
-        switch (sWindow->GetEvent()->type) {
+    while (Window::PollEvent()) {
+        switch (Window::GetEvent()->type) {
         case SDL_EVENT_QUIT:
             Close();
             break;
         }
     }
 
-    Renderer::DrawFrame();
+    Renderer::BeginDrawFrame();
+
+    Renderer::CmdBindPipeline(sTestPipeline);
+    Renderer::CmdDraw(3, 1);
+
+    Renderer::EndDrawFrame();
     Renderer::UpdateDisplay();
 }
 
 void App::Cleanup() {
     Renderer::DestroyContext();
-    sWindow->Destroy();
+    Window::Destroy();
 }
 
 int main() {

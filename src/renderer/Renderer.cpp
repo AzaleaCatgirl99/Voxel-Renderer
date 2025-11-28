@@ -7,12 +7,9 @@
 
 detail::IRenderer* Renderer::sContext = nullptr;
 
-void Renderer::CreateContext(Window* window, const Settings& settings) {
+void Renderer::CreateContext(const Settings& settings) {
     // Asserts that the context must be nullptr to make sure that it is not being created multiple times.
     assert(sContext == nullptr);
-
-    // Asserts that the window is not nullptr. There must be a window to use the renderer.
-    assert(window != nullptr);
 
     // The propertirs for the context.
     detail::IRenderer::Properties properties = {
@@ -20,9 +17,9 @@ void Renderer::CreateContext(Window* window, const Settings& settings) {
     };
 
     // Creates the correct context for the window's pipeline.
-    switch (window->Pipeline()) {
+    switch (Window::Pipeline()) {
     case RENDER_PIPELINE_VULKAN:
-        sContext = new detail::VkRenderer(window, properties);
+        sContext = new detail::VkRenderer(properties);
         break;
     }
 

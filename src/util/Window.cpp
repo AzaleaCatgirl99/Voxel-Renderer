@@ -2,10 +2,13 @@
 
 #include <SDL3/SDL_video.h>
 
+SDL_Window* Window::sContext = nullptr;
 Logger Window::sLogger = Logger("Window");
+SDL_Event Window::sEvent;
+eRenderPipeline Window::sPipeline;
 
-Window::Window(const char* title, const DisplayMode& mode, eRenderPipeline pipeline) {
-    m_ePipeline = pipeline;
+void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline pipeline) {
+    sPipeline = pipeline;
 
     // Initializes the the SDL3 video system, which is required for window management.
 	if (!SDL_Init(SDL_INIT_VIDEO))
@@ -38,10 +41,10 @@ Window::Window(const char* title, const DisplayMode& mode, eRenderPipeline pipel
         flags |= SDL_WINDOW_BORDERLESS;
 
     // Creates a resizable window. Aborts the app if failed.
-	m_pHandler = SDL_CreateWindow(title, mode.m_width, mode.m_height, flags);
-    if (!m_pHandler)
+	sContext = SDL_CreateWindow(title, mode.m_width, mode.m_height, flags);
+    if (!sContext)
         throw sLogger.RuntimeError("Failed to create internal window.");
 
-    if (!SDL_SetWindowMinimumSize(m_pHandler, mode.m_minWidth, mode.m_minHeight))
+    if (!SDL_SetWindowMinimumSize(sContext, mode.m_minWidth, mode.m_minHeight))
         throw sLogger.RuntimeError("Failed to set the minimum size.");
 }

@@ -1,10 +1,9 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
+#include "renderer/pipeline/GraphicsPipeline.h"
 #include "util/Constants.h"
 #include <cassert>
-
-class Window;
 
 // Main renderer class. Wraps various different implementations of the renderer based on the given pipeline from the window.
 class Renderer final {
@@ -15,7 +14,7 @@ public:
     };
 
     // Creates the renderer context.
-    static void CreateContext(Window* window, const Settings& settings);
+    static void CreateContext(const Settings& settings);
 
     // Destroys the renderer context.
     static void DestroyContext();
@@ -27,11 +26,39 @@ public:
         sContext->UpdateDisplay();
     }
 
-    // Draws the frame.
-    static constexpr void DrawFrame() {
+    // Begins drawing the frame.
+    static constexpr void BeginDrawFrame() {
         assert(sContext != nullptr);
 
-        sContext->DrawFrame();
+        sContext->BeginDrawFrame();
+    }
+
+    // Ends drawing the frame.
+    static constexpr void EndDrawFrame() {
+        assert(sContext != nullptr);
+
+        sContext->EndDrawFrame();
+    }
+
+    // Registers a graphics pipeline.
+    static constexpr void RegisterPipeline(const GraphicsPipeline& pipeline) {
+        assert(sContext != nullptr);
+
+        sContext->RegisterPipeline(pipeline);
+    }
+
+    // Binds a graphics pipeline.
+    static constexpr void CmdBindPipeline(const GraphicsPipeline& pipeline) {
+        assert(sContext != nullptr);
+
+        sContext->CmdBindPipeline(pipeline);
+    }
+
+    // Draws.
+    static constexpr void CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex = 0, uint32_t first_instance = 0) {
+        assert(sContext != nullptr);
+
+        sContext->CmdDraw(vertex_count, instance_count, first_vertex, first_instance);
     }
 private:
     static detail::IRenderer* sContext;
