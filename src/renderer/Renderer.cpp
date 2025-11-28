@@ -13,7 +13,8 @@ void Renderer::CreateContext(const Settings& settings) {
 
     // The propertirs for the context.
     detail::IRenderer::Properties properties = {
-        .m_swapInterval = settings.m_defaultSwapInterval
+        .m_swapInterval = settings.m_defaultSwapInterval,
+        .m_useImGUI = settings.m_useImGUI
     };
 
     // Creates the correct context for the window's pipeline.

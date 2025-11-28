@@ -29,6 +29,9 @@ public:
     // Destroys and cleans up Vulkan allocations.
     virtual void Destroy() override;
 
+    // Initializes ImGUI.
+    virtual void InitImGUI() override;
+
     // Updates the Vulkan surface.
     virtual void UpdateDisplay() override;
 

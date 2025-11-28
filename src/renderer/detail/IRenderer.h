@@ -12,6 +12,7 @@ class IRenderer {
 public:
     struct Properties {
         eRenderSwapInterval m_swapInterval;
+        bool m_useImGUI = true;
     };
 
     constexpr IRenderer(const Properties& properties) noexcept {
@@ -20,6 +21,7 @@ public:
 
     virtual void Initialize() = 0;
     virtual void Destroy() = 0;
+    virtual void InitImGUI() = 0;
     virtual void UpdateDisplay() = 0;
     virtual void BeginDrawFrame() = 0;
     virtual void EndDrawFrame() = 0;

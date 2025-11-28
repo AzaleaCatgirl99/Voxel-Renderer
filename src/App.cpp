@@ -5,6 +5,9 @@
 #include "util/Constants.h"
 #include "util/Window.h"
 #include <iostream>
+#include <imgui.h>
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
 
 static const GraphicsPipeline sTestPipeline = GraphicsPipeline("test", "test_vert.spv", "test_frag.spv")
                             // .PolygonMode(RENDER_POLYGON_MODE_LINE)
@@ -35,12 +38,21 @@ void App::Init() {
     Window::Create("Voxel Renderer", mode, RENDER_PIPELINE_VULKAN);
 
     Renderer::Settings rendererSettings = {
-        .m_defaultSwapInterval = RENDER_SWAP_INTERVAL_VSYNC
+        .m_defaultSwapInterval = RENDER_SWAP_INTERVAL_VSYNC,
+        .m_useImGUI = false
     };
 
     Renderer::CreateContext(rendererSettings);
 
     Renderer::RegisterPipeline(sTestPipeline);
+
+    // Create ImGUI context.
+    // IMGUI_CHECKVERSION();
+    // ImGui::CreateContext();
+    // ImGuiIO& io = ImGui::GetIO();
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    // Renderer::InitImGUI();
 }
 
 void App::MainLoop() {
@@ -50,7 +62,14 @@ void App::MainLoop() {
             Close();
             break;
         }
+
+        // ImGui_ImplSDL3_ProcessEvent(Window::GetEvent());
     }
+
+    // ImGui_ImplVulkan_NewFrame();
+    // ImGui_ImplSDL3_NewFrame();
+    // ImGui::NewFrame();
+    // ImGui::ShowDemoWindow();
 
     Renderer::BeginDrawFrame();
 

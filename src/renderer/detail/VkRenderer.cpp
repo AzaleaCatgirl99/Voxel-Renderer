@@ -12,6 +12,8 @@
 #include "util/Constants.h"
 #include "util/Window.h"
 #include "renderer/detail/vulkan/VkResultHandler.h"
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
 
 namespace detail {
 
@@ -181,6 +183,31 @@ void VkRenderer::Destroy() {
     vkDestroyInstance(m_instance, VK_NULL_HANDLE);
 }
 
+void VkRenderer::InitImGUI() {
+    if (m_properties.m_useImGUI) {
+        // Setup Platform/Renderer backends
+        ImGui_ImplSDL3_InitForVulkan(Window::sContext);
+
+        QueueFamilyIndices indices = GetQueueFamilies(m_physicalDevice);
+
+        ImGui_ImplVulkan_InitInfo init_info = {};
+        init_info.Instance = m_instance;
+        init_info.PhysicalDevice = m_physicalDevice;
+        init_info.Device = m_logicalDevice;
+        init_info.QueueFamily = indices.m_graphics.value();
+        init_info.Queue = m_graphicsQueue;
+        // init_info.PipelineCache = YOUR_PIPELINE_CACHE;
+        // init_info.DescriptorPool = YOUR_DESCRIPTOR_POOL;
+        init_info.MinImageCount = m_swapChainImages.size();
+        init_info.ImageCount = m_swapChainImages.size();
+        init_info.Allocator = VK_NULL_HANDLE;
+        init_info.PipelineInfoMain.RenderPass = m_renderPass;
+        init_info.PipelineInfoMain.Subpass = 0;
+        init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        ImGui_ImplVulkan_Init(&init_info);
+    }
+}
+
 void VkRenderer::UpdateDisplay() {
     // TODO recreate the swap chain.
 }
@@ -200,6 +227,11 @@ void VkRenderer::BeginDrawFrame() {
 
     // Begins recording the command buffer.
     BeginRecordCmdBuffer(m_commandBuffers[m_currentFrame], m_imageIndex);
+
+    if (m_properties.m_useImGUI) {
+        ImGui::Render();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_commandBuffers[m_currentFrame]);
+    }
 }
 
 void VkRenderer::EndDrawFrame() {

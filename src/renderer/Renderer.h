@@ -11,6 +11,7 @@ public:
     // Various settings for the renderer.
     struct Settings {
         eRenderSwapInterval m_defaultSwapInterval = RENDER_SWAP_INTERVAL_IMMEDIATE;
+        bool m_useImGUI = true;
     };
 
     // Creates the renderer context.
@@ -18,6 +19,13 @@ public:
 
     // Destroys the renderer context.
     static void DestroyContext();
+
+    // Initializes ImGUI.
+    static constexpr void InitImGUI() {
+        assert(sContext != nullptr);
+
+        sContext->InitImGUI();
+    }
 
     // Updates the display.
     static constexpr void UpdateDisplay() {
