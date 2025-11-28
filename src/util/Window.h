@@ -98,10 +98,14 @@ public:
 private:
     Window() = default;
 
+    // Watches for specific events.
+    static bool EventWatcher(void* app_data, SDL_Event* event);
+
     friend detail::VkRenderer;
 
     static SDL_Window* sContext;
     static SDL_Event sEvent;
     static eRenderPipeline sPipeline;
     static Logger sLogger;
+    static bool sMinimized;
 };

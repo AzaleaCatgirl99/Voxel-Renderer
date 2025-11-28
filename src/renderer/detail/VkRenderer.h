@@ -1,7 +1,6 @@
 #pragma once
 
 #include "renderer/detail/IRenderer.h"
-#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -74,7 +73,7 @@ private:
     0;
 
     // The max number of frames allowed to be in flight at once.
-    static constexpr const uint32_t sMaxFramesInFlight = 2;
+    static constexpr const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
     // Sets what layers to enable.
     static std::vector<const char*> sLayers;
@@ -217,13 +216,8 @@ private:
     // Ends writing commands to execute into the command buffer.
     void EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
-    // Struct to store draw command data.
-    struct DrawCmdData {
-        uint32_t m_vertexCount = 0;
-        uint32_t m_instanceCount = 0;
-        uint32_t m_firstVertex = 0;
-        uint32_t m_firstInstance = 0;
-    };
+    // Recreates the swap chain.
+    void RecreateSwapChain();
 
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
@@ -242,9 +236,9 @@ private:
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     uint32_t m_currentFrame = 0;
 
-    VkCommandBuffer m_commandBuffers[sMaxFramesInFlight];
-    VkSemaphore m_imageAvailableSemaphores[sMaxFramesInFlight];
-    VkFence m_inFlightFences[sMaxFramesInFlight];
+    VkCommandBuffer m_commandBuffers[MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore m_imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
+    VkFence m_inFlightFences[MAX_FRAMES_IN_FLIGHT];
 
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
 

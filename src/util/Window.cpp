@@ -1,11 +1,14 @@
 #include "util/Window.h"
+#include "renderer/Renderer.h"
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_video.h>
 
 SDL_Window* Window::sContext = nullptr;
 Logger Window::sLogger = Logger("Window");
 SDL_Event Window::sEvent;
 eRenderPipeline Window::sPipeline;
+bool Window::sMinimized = false;
 
 void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline pipeline) {
     sPipeline = pipeline;
@@ -47,4 +50,18 @@ void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline 
 
     if (!SDL_SetWindowMinimumSize(sContext, mode.m_minWidth, mode.m_minHeight))
         throw sLogger.RuntimeError("Failed to set the minimum size.");
+
+    SDL_AddEventWatch(EventWatcher, nullptr);
+}
+
+bool Window::EventWatcher(void* app_data, SDL_Event* event) {
+    if (event->type == SDL_EVENT_WINDOW_EXPOSED)
+        Renderer::UpdateDisplay();
+
+    if (event->type == SDL_EVENT_WINDOW_MINIMIZED)
+        sMinimized = true;
+    else
+        sMinimized = false;
+
+    return true;
 }

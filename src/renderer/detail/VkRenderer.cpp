@@ -147,7 +147,7 @@ void VkRenderer::Initialize() {
 void VkRenderer::Destroy() {
     vkDeviceWaitIdle(m_logicalDevice);
 
-    for (size_t i = 0; i < sMaxFramesInFlight; i++) {
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphores[i], VK_NULL_HANDLE);
         vkDestroyFence(m_logicalDevice, m_inFlightFences[i], VK_NULL_HANDLE);
     }
@@ -209,7 +209,7 @@ void VkRenderer::InitImGUI() {
 }
 
 void VkRenderer::UpdateDisplay() {
-    // TODO recreate the swap chain.
+    RecreateSwapChain();
 }
 
 void VkRenderer::BeginDrawFrame() {
@@ -221,6 +221,9 @@ void VkRenderer::BeginDrawFrame() {
 
     // Gets the next image index in the swap chain to be used.
     vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &m_imageIndex);
+
+    // Only reset the fence if there is work to be submitted.
+    vkResetFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame]);
 
     // Resets the command buffer.
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
@@ -270,7 +273,7 @@ void VkRenderer::EndDrawFrame() {
     vkQueuePresentKHR(m_presentationQueue, &presentInfo);
 
     // Advance to the next frame.
-    m_currentFrame = (m_currentFrame + 1) % sMaxFramesInFlight;
+    m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
@@ -949,7 +952,7 @@ void VkRenderer::CreateSwapChain() {
 
     // Create the swap chain.
     VkResult result = vkCreateSwapchainKHR(m_logicalDevice, &swapChainCreateInfo, VK_NULL_HANDLE, &m_swapChain);
-    VkResultHandler::CheckResult(result, "Failed to create swap chain!", "Created swap chain.");
+    VkResultHandler::CheckResult(result, "Failed to create swap chain!");
 
     // Load the swap chain images.
     vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, VK_NULL_HANDLE);
@@ -989,7 +992,6 @@ void VkRenderer::CreateImageViews() {
         VkResult result = vkCreateImageView(m_logicalDevice, &imageViewCreateInfo, VK_NULL_HANDLE, &m_swapChainImageViews[i]);
         VkResultHandler::CheckResult(result, "Failed to create image view!");
     }
-    sLogger.Info("Created image views.");
 }
 
 void VkRenderer::CreateRenderPass() {
@@ -1067,8 +1069,6 @@ void VkRenderer::CreateFramebuffers() {
         VkResult result = vkCreateFramebuffer(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_swapChainFramebuffers[i]);
         VkResultHandler::CheckResult(result, "Failed to create framebuffer!");
     }
-
-    sLogger.Info("Created framebuffers.");
 }
 
 void VkRenderer::CreateCommandPool() {
@@ -1091,7 +1091,7 @@ void VkRenderer::CreateCommandBuffer() {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = m_commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = sMaxFramesInFlight
+        .commandBufferCount = MAX_FRAMES_IN_FLIGHT
     };
 
     VkResult result = vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffers[m_currentFrame]);
@@ -1110,7 +1110,7 @@ void VkRenderer::CreateSyncObjects() {
         .flags = VK_FENCE_CREATE_SIGNALED_BIT
     };
 
-    for (size_t i = 0; i < sMaxFramesInFlight; i++) {
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         // Creates the semaphore for the available image.
         VkResult result = vkCreateSemaphore(m_logicalDevice, &semaphoreCreateInfo, VK_NULL_HANDLE, &m_imageAvailableSemaphores[i]);
         VkResultHandler::CheckResult(result, "Failed to create image available semaphore!");
@@ -1183,6 +1183,25 @@ void VkRenderer::EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t imag
     // Finish recording the command buffer.
     VkResult result = vkEndCommandBuffer(commandBuffer);
     VkResultHandler::CheckResult(result, "Failed to record command buffer!");
+}
+
+void VkRenderer::RecreateSwapChain() {
+    if (Window::sMinimized)
+        return;
+
+    vkDeviceWaitIdle(m_logicalDevice);
+
+    for (auto framebuffer : m_swapChainFramebuffers)
+        vkDestroyFramebuffer(m_logicalDevice, framebuffer, VK_NULL_HANDLE);
+
+    for (auto imageView : m_swapChainImageViews)
+        vkDestroyImageView(m_logicalDevice, imageView, VK_NULL_HANDLE);
+
+    vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, VK_NULL_HANDLE);
+
+    CreateSwapChain();
+    CreateImageViews();
+    CreateFramebuffers();
 }
 
 }

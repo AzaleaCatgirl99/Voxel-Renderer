@@ -10,7 +10,7 @@
 #include <backends/imgui_impl_vulkan.h>
 
 static const GraphicsPipeline sTestPipeline = GraphicsPipeline("test", "test_vert.spv", "test_frag.spv")
-                            // .PolygonMode(RENDER_POLYGON_MODE_LINE)
+                            .PolygonMode(RENDER_POLYGON_MODE_LINE)
                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
                             .CullMode(RENDER_CULL_MODE_BACK);
 
@@ -77,7 +77,6 @@ void App::MainLoop() {
     Renderer::CmdDraw(3, 1);
 
     Renderer::EndDrawFrame();
-    Renderer::UpdateDisplay();
 }
 
 void App::Cleanup() {
