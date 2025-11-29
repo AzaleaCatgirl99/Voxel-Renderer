@@ -17,11 +17,11 @@ private:
     // Logger class for printing debug information.
     static Logger sLogger;
 
-    // The result strings used.
-    static const std::flat_map<VkResult, const char*> sResultStrings;
+    // Gets the result's description.
+    static const char* GetResultDescription(const VkResult result);
 
-    // Gets the result string to use.
-    static std::string GetResultString(const VkResult result);
+    // Processes the result description
+    static std::string ProcessResultDescription(const VkResult result);
 };
 
 }

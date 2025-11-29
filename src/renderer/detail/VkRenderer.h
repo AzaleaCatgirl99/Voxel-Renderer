@@ -4,12 +4,11 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <optional>
-#include <flat_map>
+#include <unordered_map>
 #include <vulkan/vulkan.h>
+#include "renderer/pipeline/GPUBuffer.h"
 #include "renderer/pipeline/GraphicsPipeline.h"
-#include "util/Constants.h"
 #include "util/Features.h"
 #include "util/Logger.h"
 #include <vector>
@@ -43,8 +42,17 @@ public:
     // Registers a pipeline to be used.
     virtual void RegisterPipeline(const GraphicsPipeline& pipeline) override;
 
+    // Creates a buffer.
+    virtual void CreateBuffer(const GPUBuffer& buffer) override;
+
+    // Allocates memory to a buffer.
+    virtual void AllocateBufferMemory(const GPUBuffer& buffer, void* data, uint32_t size, uint32_t offset) override;
+
     // Tells the renderer to bind a pipeline when recording the command buffer.
     virtual void CmdBindPipeline(const GraphicsPipeline& pipeline) override;
+
+    // Tells the renderer to bind a buffer when recording the command buffer.
+    virtual void CmdBindBuffer(const GPUBuffer& buffer) override;
 
     // Tells the renderer to draw when recording the command buffer.
     virtual void CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) override;
@@ -83,18 +91,6 @@ private:
 
     // The required device extensions needed for the Vulkan renderer.
     static std::vector<const char*> sDeviceExtensions;
-
-    // Map for getting the Vulkan present mode from the render swap interval.
-    static const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> sPresentModes;
-
-    // Map for getting the Vulkan blend factor.
-    static const std::flat_map<eRenderBlendFactor, VkBlendFactor> sBlendFactors;
-
-    // Map for getting the Vulkan polygon modes.
-    static const std::flat_map<eRenderPolygonMode, VkPolygonMode> sPolygonModes;
-
-    // Map for getting the Vulkan cull modes.
-    static const std::flat_map<eRenderCullMode, VkCullModeFlags> sCullModes;
 
     // Static Logger object used for info and error logging.
     static Logger sLogger;
@@ -219,6 +215,9 @@ private:
     // Recreates the swap chain.
     void RecreateSwapChain();
 
+    // Finds the memory type from the filter and properties.
+    uint32_t FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties);
+
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
@@ -242,8 +241,11 @@ private:
 
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
 
-    std::map<GraphicsPipeline, VkPipeline> m_pipelines;
-    std::map<GraphicsPipeline, VkPipelineLayout> m_pipelineLayouts;
+    std::unordered_map<size_t, VkPipeline> m_pipelines;
+    std::unordered_map<size_t, VkPipelineLayout> m_pipelineLayouts;
+    std::unordered_map<size_t, VkBuffer> m_buffers;
+    std::unordered_map<size_t, VkDeviceMemory> m_bufferMemories;
+
     uint32_t m_imageIndex = 0;
 };
 

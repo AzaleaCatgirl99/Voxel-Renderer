@@ -1,7 +1,9 @@
 #include "App.h"
 
 #include "renderer/Renderer.h"
+#include "renderer/pipeline/GPUBuffer.h"
 #include "renderer/pipeline/GraphicsPipeline.h"
+#include "renderer/pipeline/VertexFormat.h"
 #include "util/Constants.h"
 #include "util/Window.h"
 #include <iostream>
@@ -9,10 +11,16 @@
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
 
-static const GraphicsPipeline sTestPipeline = GraphicsPipeline("test", "test_vert.spv", "test_frag.spv")
-                            .PolygonMode(RENDER_POLYGON_MODE_LINE)
+static const VertexFormat sTestFormat = VertexFormat()
+                            .Element(RENDER_TYPE_VEC3)
+                            .Element(RENDER_TYPE_VEC4);
+static const GraphicsPipeline sTestPipeline = GraphicsPipeline(0, "test_vert.spv", "test_frag.spv")
+                            .PolygonMode(RENDER_POLYGON_MODE_FILL)
                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
-                            .CullMode(RENDER_CULL_MODE_BACK);
+                            .CullMode(RENDER_CULL_MODE_BACK)
+                            .Vertex(sTestFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST);
+static const GPUBuffer sTestBuffer = GPUBuffer(0, GPU_BUFFER_SHARING_MODE_EXCLUSIVE, 21 * sizeof(float))
+                            .Usage(GPU_BUFFER_USAGE_VERTEX_BUFFER);
 
 bool App::sRunning = true;
 
@@ -46,6 +54,17 @@ void App::Init() {
 
     Renderer::RegisterPipeline(sTestPipeline);
 
+    Renderer::CreateBuffer(sTestBuffer);
+
+    float vertices[21] = {
+        // Position                          Color
+        0.0f, -0.75f, 0.0f,     1.0f, 0.0f, 0.0f, 1.0f,
+        0.75f, 0.75f, 0.0f,     0.0f, 1.0f, 0.0f, 1.0f,
+        -0.75f, 0.75f, 0.0f,     0.0f, 0.0f, 1.0f, 1.0f
+    };
+
+    Renderer::AllocateBufferMemory(sTestBuffer, vertices, 21 * sizeof(float));
+
     // Create ImGUI context.
     // IMGUI_CHECKVERSION();
     // ImGui::CreateContext();
@@ -74,6 +93,9 @@ void App::MainLoop() {
     Renderer::BeginDrawFrame();
 
     Renderer::CmdBindPipeline(sTestPipeline);
+
+    Renderer::CmdBindBuffer(sTestBuffer);
+
     Renderer::CmdDraw(3, 1);
 
     Renderer::EndDrawFrame();

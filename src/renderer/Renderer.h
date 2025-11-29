@@ -55,11 +55,32 @@ public:
         sContext->RegisterPipeline(pipeline);
     }
 
+    // Creates a buffer.
+    static constexpr void CreateBuffer(const GPUBuffer& buffer) {
+        assert(sContext != nullptr);
+
+        sContext->CreateBuffer(buffer);
+    }
+
+    // Allocates memory to a buffer.
+    static constexpr void AllocateBufferMemory(const GPUBuffer& buffer, void* data, uint32_t size, uint32_t offset = 0) {
+        assert(sContext != nullptr);
+
+        sContext->AllocateBufferMemory(buffer, data, size, offset);
+    }
+
     // Binds a graphics pipeline.
     static constexpr void CmdBindPipeline(const GraphicsPipeline& pipeline) {
         assert(sContext != nullptr);
 
         sContext->CmdBindPipeline(pipeline);
+    }
+
+    // Binds a buffer.
+    static constexpr void CmdBindBuffer(const GPUBuffer& buffer) {
+        assert(sContext != nullptr);
+
+        sContext->CmdBindBuffer(buffer);
     }
 
     // Draws.

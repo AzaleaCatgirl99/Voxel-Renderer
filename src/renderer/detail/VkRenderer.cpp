@@ -3,11 +3,14 @@
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_vulkan.h>
 #include <SDL3/SDL_filesystem.h>
+#include <cstring>
 #include <set>
 #include <vulkan/vulkan_beta.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "renderer/detail/vulkan/VkObjectMaps.h"
+#include "renderer/pipeline/Type.h"
 #include "util/BufferedFile.h"
 #include "util/Constants.h"
 #include "util/Window.h"
@@ -27,51 +30,6 @@ std::vector<const char*> VkRenderer::sDeviceExtensions = {
     ,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
 #endif
 };
-
-// Map for getting the Vulkan present mode from the render swap interval.
-const std::flat_map<eRenderSwapInterval, VkPresentModeKHR> VkRenderer::sPresentModes = {
-            {RENDER_SWAP_INTERVAL_IMMEDIATE, VK_PRESENT_MODE_IMMEDIATE_KHR},
-            {RENDER_SWAP_INTERVAL_VSYNC, VK_PRESENT_MODE_FIFO_KHR},
-            {RENDER_SWAP_INTERVAL_TRIPLE_BUFFERING, VK_PRESENT_MODE_MAILBOX_KHR}
-        };
-
-// Map for getting the Vulkan blend factor.
-const std::flat_map<eRenderBlendFactor, VkBlendFactor> VkRenderer::sBlendFactors = {
-            {RENDER_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO},
-            {RENDER_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE},
-            {RENDER_BLEND_FACTOR_SRC_COLOR, VK_BLEND_FACTOR_SRC_COLOR},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_SRC_COLOR, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR},
-            {RENDER_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_DST_COLOR},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_DST_COLOR, VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR},
-            {RENDER_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_SRC_ALPHA},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA},
-            {RENDER_BLEND_FACTOR_DST_ALPHA, VK_BLEND_FACTOR_DST_ALPHA},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_DST_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA},
-            {RENDER_BLEND_FACTOR_CONST_COLOR, VK_BLEND_FACTOR_CONSTANT_COLOR},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_CONST_COLOR, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR},
-            {RENDER_BLEND_FACTOR_CONST_ALPHA, VK_BLEND_FACTOR_CONSTANT_ALPHA},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_CONST_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA},
-            {RENDER_BLEND_FACTOR_SRC_ALPHA_SATURATE, VK_BLEND_FACTOR_SRC_ALPHA_SATURATE},
-            {RENDER_BLEND_FACTOR_SRC1_COLOR, VK_BLEND_FACTOR_SRC1_COLOR},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR, VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR},
-            {RENDER_BLEND_FACTOR_SRC1_ALPHA, VK_BLEND_FACTOR_SRC1_ALPHA},
-            {RENDER_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA}
-        };
-
-// Map for getting the Vulkan polygon modes.
-const std::flat_map<eRenderPolygonMode, VkPolygonMode> VkRenderer::sPolygonModes = {
-            {RENDER_POLYGON_MODE_FILL, VK_POLYGON_MODE_FILL},
-            {RENDER_POLYGON_MODE_LINE, VK_POLYGON_MODE_LINE},
-            {RENDER_POLYGON_MODE_POINT, VK_POLYGON_MODE_POINT}
-        };
-
-// Map for getting the Vulkan cull modes.
-const std::flat_map<eRenderCullMode, VkCullModeFlags> VkRenderer::sCullModes = {
-            {RENDER_CULL_MODE_NONE, VK_CULL_MODE_NONE},
-            {RENDER_CULL_MODE_FRONT, VK_CULL_MODE_FRONT_BIT},
-            {RENDER_CULL_MODE_BACK, VK_CULL_MODE_BACK_BIT},
-            {RENDER_CULL_MODE_FRONT_AND_BACK, VK_CULL_MODE_FRONT_AND_BACK}
-        };
 
 // Sets what layers to enable.
 std::vector<const char*> VkRenderer::sLayers = {
@@ -146,6 +104,12 @@ void VkRenderer::Initialize() {
 
 void VkRenderer::Destroy() {
     vkDeviceWaitIdle(m_logicalDevice);
+
+    for (auto& buffer : m_buffers)
+        vkDestroyBuffer(m_logicalDevice, buffer.second, VK_NULL_HANDLE);
+
+    for (auto& bufferMemory : m_bufferMemories)
+        vkFreeMemory(m_logicalDevice, bufferMemory.second, VK_NULL_HANDLE);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphores[i], VK_NULL_HANDLE);
@@ -340,12 +304,39 @@ void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
         .pDynamicStates = dynamicStates.data()
     };
 
+    // Checks whether the pipeline has a vertex format. If it does, then it'll setup the binding and attribute descriptions.
+    bool useVertex = pipeline.m_vertexFormat.has_value();
+    VkVertexInputBindingDescription vertexBindingDesc;
+    std::vector<VkVertexInputAttributeDescription> vertexAttribDescs;
+    if (useVertex) {
+        vertexBindingDesc = {
+            .binding = 0,
+            .stride = static_cast<uint32_t>(pipeline.m_vertexFormat->m_stride),
+            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX // TODO this needs to change to setup instance rendering.
+        };
+
+        uint32_t offset = 0;
+        for (uint32_t i = 0; i < pipeline.m_vertexFormat->m_elementsSize; i++) {
+            VkVertexInputAttributeDescription desc = {
+                .location = i,
+                .binding = 0,
+                .format = VkObjectMaps::GetTypeFormat(pipeline.m_vertexFormat->m_elements[i].m_type),
+                .offset = offset
+            };
+
+            vertexAttribDescs.push_back(desc);
+
+            offset += GetRenderTypeSize(pipeline.m_vertexFormat->m_elements[i].m_type);
+        }
+    }
+
     // Configure how vertex data is passed to the vertex shader.
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .pVertexBindingDescriptions = VK_NULL_HANDLE,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions = VK_NULL_HANDLE
+        .vertexBindingDescriptionCount = useVertex ? 1u : 0u,
+        .pVertexBindingDescriptions = useVertex ? &vertexBindingDesc : VK_NULL_HANDLE,
+        .vertexAttributeDescriptionCount = useVertex ? static_cast<uint32_t>(vertexAttribDescs.size()) : 0u,
+        .pVertexAttributeDescriptions = useVertex ? vertexAttribDescs.data() : VK_NULL_HANDLE,
     };
 
     // Configure how vertices are interpreted.
@@ -388,8 +379,8 @@ void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .depthClampEnable = VK_FALSE, // Discard off-screen fragments, do not clamp.
         .rasterizerDiscardEnable = VK_FALSE,
-        .polygonMode = pipeline.m_polygonMode.has_value() ? sPolygonModes.at(pipeline.m_polygonMode.value()) : VK_POLYGON_MODE_FILL, // Fill triangles.
-        .cullMode = pipeline.m_cullMode.has_value() ? sCullModes.at(pipeline.m_cullMode.value()) : VK_CULL_MODE_BACK_BIT,
+        .polygonMode = pipeline.m_polygonMode.has_value() ? VkObjectMaps::GetPolygonMode(pipeline.m_polygonMode.value()) : VK_POLYGON_MODE_FILL, // Fill triangles.
+        .cullMode = pipeline.m_cullMode.has_value() ? VkObjectMaps::GetCullMode(pipeline.m_cullMode.value()) : VK_CULL_MODE_BACK_BIT,
         .frontFace = VK_FRONT_FACE_CLOCKWISE,
         .depthBiasEnable = VK_FALSE,
         .depthBiasConstantFactor = 0.0f,
@@ -415,11 +406,11 @@ void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
     // Important for blending alpha channels.
     VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo = {
         .blendEnable = pipeline.m_blendFunc.has_value() ? VK_TRUE : VK_FALSE,
-        .srcColorBlendFactor = pipeline.m_blendFunc.has_value() ? sBlendFactors.at(pipeline.m_blendFunc->at(0)) : VK_BLEND_FACTOR_ONE, // Optional.
-        .dstColorBlendFactor = pipeline.m_blendFunc.has_value() ? sBlendFactors.at(pipeline.m_blendFunc->at(1)) : VK_BLEND_FACTOR_ZERO, // Optional.
+        .srcColorBlendFactor = pipeline.m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(pipeline.m_blendFunc->at(0)) : VK_BLEND_FACTOR_ONE, // Optional.
+        .dstColorBlendFactor = pipeline.m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(pipeline.m_blendFunc->at(1)) : VK_BLEND_FACTOR_ZERO, // Optional.
         .colorBlendOp = VK_BLEND_OP_ADD, // Optional.
-        .srcAlphaBlendFactor = pipeline.m_blendFunc.has_value() ? sBlendFactors.at(pipeline.m_blendFunc->at(2)) : VK_BLEND_FACTOR_ONE, // Optional.
-        .dstAlphaBlendFactor = pipeline.m_blendFunc.has_value() ? sBlendFactors.at(pipeline.m_blendFunc->at(3)) : VK_BLEND_FACTOR_ZERO, // Optional.
+        .srcAlphaBlendFactor = pipeline.m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(pipeline.m_blendFunc->at(2)) : VK_BLEND_FACTOR_ONE, // Optional.
+        .dstAlphaBlendFactor = pipeline.m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(pipeline.m_blendFunc->at(3)) : VK_BLEND_FACTOR_ZERO, // Optional.
         .alphaBlendOp = VK_BLEND_OP_ADD, // Optional.
         .colorWriteMask = 
             VK_COLOR_COMPONENT_R_BIT |
@@ -450,8 +441,8 @@ void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
         .pPushConstantRanges = VK_NULL_HANDLE
     };
 
-    m_pipelineLayouts.try_emplace(pipeline);
-    result = vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_pipelineLayouts[pipeline]);
+    m_pipelineLayouts.try_emplace(pipeline.m_id);
+    result = vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_pipelineLayouts[pipeline.m_id]);
     VkResultHandler::CheckResult(result, "Failed to create pipeline layout!", "Created pipeline layout.");
 
     // Create the graphices pipeline.
@@ -467,15 +458,15 @@ void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
         .pDepthStencilState = VK_NULL_HANDLE,
         .pColorBlendState = &colorBlendingInfo,
         .pDynamicState = &dynamicStateInfo,
-        .layout = m_pipelineLayouts[pipeline],
+        .layout = m_pipelineLayouts[pipeline.m_id],
         .renderPass = m_renderPass,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1
     };
 
-    m_pipelines.try_emplace(pipeline);
-    result = vkCreateGraphicsPipelines(m_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &m_pipelines[pipeline]);
+    m_pipelines.try_emplace(pipeline.m_id);
+    result = vkCreateGraphicsPipelines(m_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &m_pipelines[pipeline.m_id]);
     VkResultHandler::CheckResult(result, "Failed to create graphics pipeline!", "Created graphics pipeline.");
 
     // Deletes the shader modules. These should be at the end of the function.
@@ -483,8 +474,50 @@ void VkRenderer::RegisterPipeline(const GraphicsPipeline& pipeline) {
     vkDestroyShaderModule(m_logicalDevice, vertShaderModule, VK_NULL_HANDLE);
 }
 
+void VkRenderer::CreateBuffer(const GPUBuffer& buffer) {
+    VkBufferCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .flags = buffer.m_flags,
+        .size = buffer.m_size,
+        .usage = buffer.m_usages,
+        .sharingMode = VkObjectMaps::GetSharingMode(buffer.m_sharingMode)
+    };
+
+    m_buffers.try_emplace(buffer.m_id);
+    VkResult result = vkCreateBuffer(m_logicalDevice, &createInfo, VK_NULL_HANDLE, &m_buffers[buffer.m_id]);
+    VkResultHandler::CheckResult(result, "Failed to create buffer!");
+
+    VkMemoryRequirements memoryRequirements;
+    vkGetBufferMemoryRequirements(m_logicalDevice, m_buffers[buffer.m_id], &memoryRequirements);
+
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memoryRequirements.size,
+        .memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    };
+
+    m_bufferMemories.try_emplace(buffer.m_id);
+    result = vkAllocateMemory(m_logicalDevice, &allocInfo, VK_NULL_HANDLE, &m_bufferMemories[buffer.m_id]);
+    VkResultHandler::CheckResult(result, "Failed to create buffer memory handler!");
+
+    // Binds the buffer to the memory handler.
+    vkBindBufferMemory(m_logicalDevice, m_buffers[buffer.m_id], m_bufferMemories[buffer.m_id], 0);
+}
+
+void VkRenderer::AllocateBufferMemory(const GPUBuffer& buffer, void* data, uint32_t size, uint32_t offset) {
+    void* _data;
+    vkMapMemory(m_logicalDevice, m_bufferMemories[buffer.m_id], offset, size, 0, &_data);
+    memcpy(_data, data, size);
+    vkUnmapMemory(m_logicalDevice, m_bufferMemories[buffer.m_id]);
+}
+
 void VkRenderer::CmdBindPipeline(const GraphicsPipeline& pipeline) {
-    vkCmdBindPipeline(m_commandBuffers[m_currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelines[pipeline]);
+    vkCmdBindPipeline(m_commandBuffers[m_currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelines[pipeline.m_id]);
+}
+
+void VkRenderer::CmdBindBuffer(const GPUBuffer& buffer) {
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(m_commandBuffers[m_currentFrame], 0, 1, &m_buffers[buffer.m_id], &offset);
 }
 
 void VkRenderer::CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
@@ -881,10 +914,10 @@ VkSurfaceFormatKHR VkRenderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfa
 VkPresentModeKHR VkRenderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
     // Checks if the swap interval from the renderer properties is usable. If not, then VSYNC is used instead.
     for (const auto& availablePresentMode : availablePresentModes)
-        if (availablePresentMode == sPresentModes.at(m_properties.m_swapInterval))
+        if (availablePresentMode == VkObjectMaps::GetPresentMode(m_properties.m_swapInterval))
             return availablePresentMode;
 
-    return sPresentModes.at(RENDER_SWAP_INTERVAL_VSYNC);
+    return VkObjectMaps::GetPresentMode(RENDER_SWAP_INTERVAL_VSYNC);
 }
 
 VkExtent2D VkRenderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
@@ -1202,6 +1235,18 @@ void VkRenderer::RecreateSwapChain() {
     CreateSwapChain();
     CreateImageViews();
     CreateFramebuffers();
+}
+
+uint32_t VkRenderer::FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memoryProperties);
+
+    // Gets the right memory type.
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
+        if (filter & (1 << i) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            return i;
+
+    throw sLogger.RuntimeError("Failed to find suitable memory type!");
 }
 
 }

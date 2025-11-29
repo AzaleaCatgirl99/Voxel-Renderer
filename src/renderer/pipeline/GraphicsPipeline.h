@@ -1,11 +1,12 @@
 #pragma once
 
 #include "renderer/pipeline/Scissor.h"
+#include "renderer/pipeline/VertexFormat.h"
 #include "renderer/pipeline/Viewport.h"
 #include "util/Constants.h"
 #include <array>
+#include <cstddef>
 #include <optional>
-#include <string>
 
 namespace detail {
 class VkRenderer;
@@ -14,9 +15,8 @@ class VkRenderer;
 // Utility for creating graphics pipelines.
 class GraphicsPipeline final {
 public:
-    constexpr GraphicsPipeline() = default;
-    consteval GraphicsPipeline(const char* name, const char* vertex, const char* fragment) {
-        m_name = name;
+    consteval GraphicsPipeline(size_t id, const char* vertex, const char* fragment) {
+        m_id = id;
         m_vertex = vertex;
         m_fragment = fragment;
     }
@@ -63,25 +63,33 @@ public:
         return *this;
     }
 
+    // Sets the vertex format and mode.
+    constexpr GraphicsPipeline& Vertex(const VertexFormat& format, eRenderVertexMode mode) noexcept {
+        m_vertexFormat = format;
+        m_vertexMode = mode;
+
+        return *this;
+    }
+
     constexpr bool operator==(const GraphicsPipeline& other) noexcept {
-        return m_name == other.m_name;
+        return m_id == other.m_id;
     }
 
     constexpr bool operator!=(const GraphicsPipeline& other) noexcept {
-        return m_name != other.m_name;
+        return m_id != other.m_id;
     }
     
     constexpr bool operator<(const GraphicsPipeline& other) const noexcept {
-        return m_name < other.m_name;
+        return m_id < other.m_id;
     }
 
     constexpr bool operator>(const GraphicsPipeline& other) const noexcept {
-        return m_name > other.m_name;
+        return m_id > other.m_id;
     }
 private:
     friend detail::VkRenderer;
 
-    std::string m_name;
+    size_t m_id;
     const char* m_vertex;
     const char* m_fragment;
     std::optional<eRenderPolygonMode> m_polygonMode;
@@ -89,4 +97,6 @@ private:
     std::optional<std::array<eRenderBlendFactor, 4>> m_blendFunc;
     std::optional<RenderViewport> m_viewport;
     std::optional<RenderScissor> m_scissor;
+    std::optional<VertexFormat> m_vertexFormat;
+    std::optional<eRenderVertexMode> m_vertexMode;
 };

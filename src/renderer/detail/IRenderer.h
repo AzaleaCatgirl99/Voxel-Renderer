@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer/pipeline/GPUBuffer.h"
 #include "util/Constants.h"
 #include <cstdint>
 
@@ -26,7 +27,10 @@ public:
     virtual void BeginDrawFrame() = 0;
     virtual void EndDrawFrame() = 0;
     virtual void RegisterPipeline(const GraphicsPipeline& pipeline) = 0;
+    virtual void CreateBuffer(const GPUBuffer& buffer) = 0;
+    virtual void AllocateBufferMemory(const GPUBuffer& buffer, void* data, uint32_t size, uint32_t offset) = 0;
     virtual void CmdBindPipeline(const GraphicsPipeline& pipeline) = 0;
+    virtual void CmdBindBuffer(const GPUBuffer& buffer) = 0;
     virtual void CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) = 0;
 
     virtual ~IRenderer() {
