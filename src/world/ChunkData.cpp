@@ -82,4 +82,5 @@ uint16_t ChunkData::GetSet(const uint16_t index, const uint16_t value) {
             m_sixteenBitBlocks[index] = value;
             break;
     }
+    return oldValue;
 }
