@@ -1,4 +1,4 @@
-#include "renderer/pipeline/Type.h"
+#include "util/display/pipeline/Type.h"
 
 const size_t GetRenderTypeCount(eRenderType type) {
     switch (type) {

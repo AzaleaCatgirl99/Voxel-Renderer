@@ -13,49 +13,41 @@ public:
         m_name = name;
     }
 
-    // Prints a generic log with a prefix or new line.
     template<typename... Args>
     constexpr void Print(const Args&... args) {
         (std::cout << ... << args);
     }
 
-    // Prints a generic log with a prefix.
     template<typename... Args>
     constexpr void Println(const Args&... args) {
         (std::cout << ... << args) << std::endl;
     }
 
-    // Logs at a verbose level.
     template<typename... Args>
     constexpr void Verbose(const Args&... args) {
         InternalLog<Args...>(args..., "VERBOSE");
     }
 
-    // Logs at an info level.
     template<typename... Args>
     constexpr void Info(const Args&... args) {
         InternalLog<Args...>(args..., "INFO");
     }
 
-    // Logs at an error level.
     template<typename... Args>
     constexpr void Error(const Args&... args) {
         InternalLog<Args...>(args..., "ERROR");
     }
 
-    // Logs at a warning level.
     template<typename... Args>
     constexpr void Warning(const Args&... args) {
         InternalLog<Args...>(args..., "WARNING");
     }
 
-    // Gets an exception.
     template<typename... Args>
     constexpr std::exception Exception(const Args&... args) {
         return std::exception(GetStr<Args...>(args..., "EXCEPTION"));
     }
 
-    // Gets a runtime error.
     template<typename... Args>
     constexpr std::runtime_error RuntimeError(const Args&... args) {
         return std::runtime_error(GetStr<Args...>(args..., "RUNTIME_ERROR"));

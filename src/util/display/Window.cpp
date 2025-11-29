@@ -1,6 +1,6 @@
-#include "util/Window.h"
-#include "renderer/Renderer.h"
+#include "util/display/Window.h"
 
+#include "util/display/RenderSystem.h"
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_video.h>
 
@@ -56,7 +56,7 @@ void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline 
 
 bool Window::EventWatcher(void* app_data, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_EXPOSED)
-        Renderer::UpdateDisplay();
+        RenderSystem::UpdateDisplay();
 
     if (event->type == SDL_EVENT_WINDOW_MINIMIZED)
         sMinimized = true;

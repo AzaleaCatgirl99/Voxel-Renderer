@@ -1,12 +1,12 @@
 #include "App.h"
 
-#include "renderer/Renderer.h"
-#include "renderer/pipeline/GPUBuffer.h"
-#include "renderer/pipeline/GraphicsPipeline.h"
-#include "renderer/pipeline/VertexFormat.h"
+#include "util/ImGUIHelper.h"
+#include "util/display/RenderSystem.h"
+#include "util/display/buffer/GPUBuffer.h"
+#include "util/display/pipeline/GraphicsPipeline.h"
+#include "util/display/pipeline/VertexFormat.h"
 #include "util/Constants.h"
-#include "util/Window.h"
-#include <iostream>
+#include "util/display/Window.h"
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
@@ -14,12 +14,12 @@
 static const VertexFormat sTestFormat = VertexFormat()
                             .Element(RENDER_TYPE_VEC3)
                             .Element(RENDER_TYPE_VEC4);
-static const GraphicsPipeline sTestPipeline = GraphicsPipeline(0, "test_vert.spv", "test_frag.spv")
+static GraphicsPipeline sTestPipeline = GraphicsPipeline("test_vert.spv", "test_frag.spv")
                             .PolygonMode(RENDER_POLYGON_MODE_FILL)
                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
                             .CullMode(RENDER_CULL_MODE_BACK)
                             .Vertex(sTestFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST);
-static const GPUBuffer sTestBuffer = GPUBuffer(0, GPU_BUFFER_SHARING_MODE_EXCLUSIVE, 21 * sizeof(float))
+static GPUBuffer sTestBuffer = GPUBuffer(GPU_BUFFER_SHARING_MODE_EXCLUSIVE, 21 * sizeof(float))
                             .Usage(GPU_BUFFER_USAGE_VERTEX_BUFFER);
 
 bool App::sRunning = true;
@@ -34,8 +34,6 @@ void App::Run() {
 }
 
 void App::Init() {
-    std::cout << "Princess is so cute that she might as well be a little fairy" << std::endl;
-
     DisplayMode mode = {
         .m_width = 1040,
 		.m_height = 680,
@@ -45,16 +43,15 @@ void App::Init() {
 
     Window::Create("Voxel Renderer", mode, RENDER_PIPELINE_VULKAN);
 
-    Renderer::Settings rendererSettings = {
-        .m_defaultSwapInterval = RENDER_SWAP_INTERVAL_VSYNC,
-        .m_useImGUI = false
+    RenderSystem::Settings rendererSettings = {
+        .m_swapInterval = RENDER_SWAP_INTERVAL_VSYNC,
     };
+    RenderSystem::Initialize(rendererSettings);
 
-    Renderer::CreateContext(rendererSettings);
+    // ImGUIHelper::Initialize();
 
-    Renderer::RegisterPipeline(sTestPipeline);
-
-    Renderer::CreateBuffer(sTestBuffer);
+    sTestPipeline.Build();
+    sTestBuffer.Build();
 
     float vertices[21] = {
         // Position                          Color
@@ -63,15 +60,7 @@ void App::Init() {
         -0.75f, 0.75f, 0.0f,     0.0f, 0.0f, 1.0f, 1.0f
     };
 
-    Renderer::AllocateBufferMemory(sTestBuffer, vertices, 21 * sizeof(float));
-
-    // Create ImGUI context.
-    // IMGUI_CHECKVERSION();
-    // ImGui::CreateContext();
-    // ImGuiIO& io = ImGui::GetIO();
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
-    // Renderer::InitImGUI();
+    sTestBuffer.Allocate(vertices, 21 * sizeof(float));
 }
 
 void App::MainLoop() {
@@ -82,27 +71,32 @@ void App::MainLoop() {
             break;
         }
 
-        // ImGui_ImplSDL3_ProcessEvent(Window::GetEvent());
+        // ImGUIHelper::ProcessEvents();
     }
 
-    // ImGui_ImplVulkan_NewFrame();
-    // ImGui_ImplSDL3_NewFrame();
-    // ImGui::NewFrame();
-    // ImGui::ShowDemoWindow();
+    // ImGUIHelper::BeginDraw();
 
-    Renderer::BeginDrawFrame();
+    RenderSystem::BeginDrawFrame();
 
-    Renderer::CmdBindPipeline(sTestPipeline);
+    sTestPipeline.CmdBind();
+    sTestBuffer.CmdBind();
 
-    Renderer::CmdBindBuffer(sTestBuffer);
+    RenderSystem::CmdDraw(3, 1);
 
-    Renderer::CmdDraw(3, 1);
+    // ImGUIHelper::CmdDraw();
 
-    Renderer::EndDrawFrame();
+    RenderSystem::EndDrawFrame();
 }
 
 void App::Cleanup() {
-    Renderer::DestroyContext();
+    RenderSystem::WaitDevice();
+
+    // ImGUIHelper::Destroy();
+
+    sTestBuffer.Delete();
+    sTestPipeline.Delete();
+
+    RenderSystem::Destroy();
     Window::Destroy();
 }
 

@@ -1,12 +1,8 @@
 #pragma once
 
-#include "renderer/pipeline/Type.h"
+#include "util/display/pipeline/Type.h"
 #include <array>
 #include <cstddef>
-
-namespace detail {
-class VkRenderer;
-}
 
 // Simple class for handling different vertex formats.
 class VertexFormat final {
@@ -24,7 +20,7 @@ public:
         return *this;
     }
 private:
-    friend detail::VkRenderer;
+    friend class GraphicsPipeline;
 
     struct ElementData {
         eRenderType m_type;

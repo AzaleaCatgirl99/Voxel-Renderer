@@ -2,10 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-
-namespace detail {
-class VkRenderer;
-}
+#include <vulkan/vulkan.h>
 
 // List of available usages for a GPU buffer.
 enum eGPUBufferUsage {
@@ -36,8 +33,7 @@ enum eGPUBufferCreateFlag {
 // Class for handling the creation and access of GPU buffers.
 class GPUBuffer final {
 public:
-    consteval GPUBuffer(size_t id, eGPUBufferSharingMode mode, uint32_t size) {
-        m_id = id;
+    constexpr GPUBuffer(eGPUBufferSharingMode mode, uint32_t size) {
         m_sharingMode = mode;
         m_size = size;
     }
@@ -56,27 +52,17 @@ public:
         return *this;
     }
 
-    constexpr bool operator==(const GPUBuffer& other) noexcept {
-        return m_id == other.m_id;
-    }
-
-    constexpr bool operator!=(const GPUBuffer& other) noexcept {
-        return m_id != other.m_id;
-    }
-    
-    constexpr bool operator<(const GPUBuffer& other) const noexcept {
-        return m_id < other.m_id;
-    }
-
-    constexpr bool operator>(const GPUBuffer& other) const noexcept {
-        return m_id > other.m_id;
-    }
+    void Build();
+    void Allocate(void* data, uint32_t size, uint32_t offset = 0);
+    void CmdBind();
+    void Delete();
 private:
-    friend detail::VkRenderer;
+    friend class RenderSystem;
 
-    size_t m_id;
     eGPUBufferSharingMode m_sharingMode;
     uint32_t m_size = 0;
     uint32_t m_usages = 0;
     uint32_t m_flags = 0;
+    VkBuffer m_handler = VK_NULL_HANDLE;
+    VkDeviceMemory m_memory = VK_NULL_HANDLE;
 };

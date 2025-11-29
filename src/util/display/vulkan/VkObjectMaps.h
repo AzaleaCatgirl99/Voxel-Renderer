@@ -1,7 +1,7 @@
 #pragma once
 
-#include "renderer/pipeline/GPUBuffer.h"
-#include "renderer/pipeline/Type.h"
+#include "util/display/buffer/GPUBuffer.h"
+#include "util/display/pipeline/Type.h"
 #include "util/Constants.h"
 #include <vulkan/vulkan.h>
 

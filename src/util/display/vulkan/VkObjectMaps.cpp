@@ -1,4 +1,4 @@
-#include "renderer/detail/vulkan/VkObjectMaps.h"
+#include "util/display/vulkan/VkObjectMaps.h"
 
 VkPresentModeKHR VkObjectMaps::GetPresentMode(eRenderSwapInterval interval) {
     switch (interval) {

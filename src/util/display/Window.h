@@ -7,10 +7,6 @@
 #include "util/Constants.h"
 #include "util/Logger.h"
 
-namespace detail {
-class VkRenderer;
-}
-
 // Struct for toggling default display features.
 struct DisplayMode final {
     int m_width = 0;
@@ -96,12 +92,13 @@ public:
         return SDL_PollEvent(&sEvent);
     }
 private:
+    friend class RenderSystem;
+    friend class ImGUIHelper;
+
     Window() = default;
 
     // Watches for specific events.
     static bool EventWatcher(void* app_data, SDL_Event* event);
-
-    friend detail::VkRenderer;
 
     static SDL_Window* sContext;
     static SDL_Event sEvent;

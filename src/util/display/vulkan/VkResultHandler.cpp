@@ -1,4 +1,4 @@
-#include "renderer/detail/vulkan/VkResultHandler.h"
+#include "util/display/vulkan/VkResultHandler.h"
 
 #include <string>
 
@@ -8,9 +8,7 @@
 #define VK_ERROR_NOT_PERMITTED VK_ERROR_NOT_PERMITTED_EXT
 #endif
 
-namespace detail {
-
-Logger VkResultHandler::sLogger = Logger("VkResultHandler");
+Logger VkResultHandler::sLogger = Logger("RenderSystem");
 
 void VkResultHandler::CheckResult(const VkResult result, const char* error, std::optional<const char*> success) {
     if (result == VK_SUCCESS) {
@@ -144,5 +142,3 @@ std::string VkResultHandler::ProcessResultDescription(const VkResult result) {
     // If the flat_map does not hold the result, then output the code in integer form.
     return "Result code '" + std::to_string(result) + "'";
 };
-
-}

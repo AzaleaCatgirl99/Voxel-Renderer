@@ -12,28 +12,28 @@ public:
 
     BufferedFile() = default;
     constexpr BufferedFile(const std::vector<char>& data) {
-        m_data = data;
+        m_data = data.data();
+        m_size = data.size();
     }
     constexpr BufferedFile(const char* data, size_t n) {
-        m_data = std::vector<char>(data, data + n);
+        m_data = data;
+        m_size = n;
     }
 
-    // Gets the file data.
     constexpr const char* Data() const noexcept {
-        return m_data.data();
+        return m_data;
     }
 
-    //Gets the file data in the format as uint32_t.
     constexpr const uint32_t* DataAsUInt32() const noexcept {
-        return reinterpret_cast<const uint32_t*>(m_data.data());
+        return reinterpret_cast<const uint32_t*>(m_data);
     }
 
-    // Gets the file size.
     constexpr const size_t Size() const noexcept {
-        return m_data.size();
+        return m_size;
     }
 private:
     static Logger sLogger;
 
-    std::vector<char> m_data;
+    const char* m_data = nullptr;
+    size_t m_size = 0;
 };

@@ -1,12 +1,9 @@
 #pragma once
 
-#include <flat_map>
 #include <optional>
 #include <vulkan/vulkan.h>
 #include "util/Logger.h"
 #include <SDL3/SDL_platform.h>
-
-namespace detail {
 
 // Utility class for interpreting VkResult enums.
 class VkResultHandler final {
@@ -23,5 +20,3 @@ private:
     // Processes the result description
     static std::string ProcessResultDescription(const VkResult result);
 };
-
-}
