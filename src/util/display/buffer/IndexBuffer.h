@@ -1,21 +1,19 @@
 #pragma once
 
-#include "util/display/RenderSystem.h"
-#include "util/display/pipeline/VertexFormat.h"
+#include "util/display/pipeline/Type.h"
 #include "util/display/buffer/GPUBuffer.h"
 #include <cstdint>
 #include <SDL3/SDL_platform_defines.h>
-#include <vulkan/vulkan.h>
 
-// Class for handling vertex buffer creation/usage.
-class VertexBuffer final {
+// Class for handling index buffer creation/usage.
+class IndexBuffer final {
 public:
-    constexpr VertexBuffer(uint32_t size, const VertexFormat format) {
-        m_buffer = GPUBuffer(SHARING_MODE, size * format.m_stride)
-                    .UsageFlag(GPU_BUFFER_USAGE_TRANSFER_DST).UsageFlag(GPU_BUFFER_USAGE_VERTEX_BUFFER)
+    constexpr IndexBuffer(uint32_t size, eRenderType type) {
+        m_buffer = GPUBuffer(SHARING_MODE, (size * 3) * GetRenderTypeSize(type))
+                    .UsageFlag(GPU_BUFFER_USAGE_TRANSFER_DST).UsageFlag(GPU_BUFFER_USAGE_INDEX_BUFFER)
                     .MemoryPropertiesFlag(GPU_BUFFER_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        m_size = size;
-        m_format = format;
+        m_size = (size * 3) * GetRenderTypeSize(type);
+        m_type = type;
     }
 
     constexpr void Build() {
@@ -24,15 +22,15 @@ public:
 
     constexpr void Allocate(const void* data) {
         // A staging buffer is needed in order to move over the data to the GPU.
-        GPUBuffer staging = GPUBuffer(SHARING_MODE, m_size * m_format.m_stride)
+        GPUBuffer staging = GPUBuffer(SHARING_MODE, m_size)
                         .UsageFlag(GPU_BUFFER_USAGE_TRANSFER_SRC)
                         .MemoryPropertiesFlag(GPU_BUFFER_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
                         .MemoryPropertiesFlag(GPU_BUFFER_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
         staging.Build();
-        staging.Allocate(data, m_size * m_format.m_stride);
+        staging.Allocate(data, m_size);
 
-        m_buffer.Copy(staging, m_size * m_format.m_stride);
+        m_buffer.Copy(staging, m_size);
 
         // The staging buffer is deleted once the copy is done because it is not needed anymore.
         staging.Delete();
@@ -52,5 +50,5 @@ private:
 
     GPUBuffer m_buffer;
     uint32_t m_size = 0;
-    VertexFormat m_format;
+    eRenderType m_type;
 };

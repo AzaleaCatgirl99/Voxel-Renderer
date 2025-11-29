@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <vulkan/vulkan.h>
 
-// List of available usages for a GPU buffer.
 enum eGPUBufferUsage {
     GPU_BUFFER_USAGE_TRANSFER_SRC = 0x00000001,
     GPU_BUFFER_USAGE_TRANSFER_DST = 0x00000002,
@@ -17,52 +16,66 @@ enum eGPUBufferUsage {
     GPU_BUFFER_USAGE_INDIRECT_BUFFER = 0x00000100
 };
 
-// List of available sharing modes for a GPU buffer.
 enum eGPUBufferSharingMode {
     GPU_BUFFER_SHARING_MODE_EXCLUSIVE,
     GPU_BUFFER_SHARING_MODE_CONCURRENT
 };
 
-// List of available create flags for a GPU buffer
 enum eGPUBufferCreateFlag {
     GPU_BUFFER_CREATE_SPARSE_BINDING = 0x00000001,
     GPU_BUFFER_CREATE_SPARSE_RESIDENCY = 0x00000002,
     GPU_BUFFER_CREATE_SPARSE_ALIASED = 0x00000004
 };
 
+enum eGPUBufferMemoryProperty {
+    GPU_BUFFER_MEMORY_PROPERTY_DEVICE_LOCAL_BIT = 0x00000001,
+    GPU_BUFFER_MEMORY_PROPERTY_HOST_VISIBLE_BIT = 0x00000002,
+    GPU_BUFFER_MEMORY_PROPERTY_HOST_COHERENT_BIT = 0x00000004,
+    GPU_BUFFER_MEMORY_PROPERTY_HOST_CACHED_BIT = 0x00000008,
+    GPU_BUFFER_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT = 0x00000010
+};
+
 // Class for handling the creation and access of GPU buffers.
 class GPUBuffer final {
 public:
+    constexpr GPUBuffer() = default;
     constexpr GPUBuffer(eGPUBufferSharingMode mode, uint32_t size) {
         m_sharingMode = mode;
         m_size = size;
     }
 
-    // Adds a usage flag.
-    constexpr GPUBuffer& Usage(eGPUBufferUsage usage) noexcept {
+    constexpr GPUBuffer& UsageFlag(eGPUBufferUsage usage) noexcept {
         m_usages |= usage;
 
         return *this;
     }
 
-    // Adds a create flag.
-    constexpr GPUBuffer& Flag(eGPUBufferCreateFlag flag) noexcept {
+    constexpr GPUBuffer& CreateFlag(eGPUBufferCreateFlag flag) noexcept {
         m_flags |= flag;
 
         return *this;
     }
 
+    constexpr GPUBuffer& MemoryPropertiesFlag(eGPUBufferMemoryProperty property) noexcept {
+        m_memProperties |= property;
+
+        return *this;
+    }
+
     void Build();
-    void Allocate(void* data, uint32_t size, uint32_t offset = 0);
-    void CmdBind();
+    void Allocate(const void* data, uint32_t size, uint32_t offset = 0);
+    void Copy(GPUBuffer& src, uint32_t size, uint32_t src_offset = 0, uint32_t dst_offset = 0);
     void Delete();
 private:
     friend class RenderSystem;
+    friend class VertexBuffer;
+    friend class IndexBuffer;
 
     eGPUBufferSharingMode m_sharingMode;
     uint32_t m_size = 0;
     uint32_t m_usages = 0;
     uint32_t m_flags = 0;
+    uint32_t m_memProperties = 0;
     VkBuffer m_handler = VK_NULL_HANDLE;
     VkDeviceMemory m_memory = VK_NULL_HANDLE;
 };

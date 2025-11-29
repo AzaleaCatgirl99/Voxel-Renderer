@@ -7,7 +7,7 @@
 // Simple class for handling different vertex formats.
 class VertexFormat final {
 public:
-    consteval VertexFormat() = default;
+    constexpr VertexFormat() = default;
 
     // Adds an element.
     constexpr VertexFormat& Element(eRenderType type) {
@@ -21,6 +21,7 @@ public:
     }
 private:
     friend class GraphicsPipeline;
+    friend class VertexBuffer;
 
     struct ElementData {
         eRenderType m_type;

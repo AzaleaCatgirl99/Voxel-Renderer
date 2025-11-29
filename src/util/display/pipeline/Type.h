@@ -13,7 +13,9 @@ enum eRenderType {
     RENDER_TYPE_FLOAT,
     RENDER_TYPE_DOUBLE,
     RENDER_TYPE_INT,
-    RENDER_TYPE_UINT
+    RENDER_TYPE_UINT,
+    RENDER_TYPE_INT16_T,
+    RENDER_TYPE_UINT16_T
 };
 
 const size_t GetRenderTypeCount(eRenderType type);

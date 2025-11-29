@@ -113,3 +113,22 @@ VkSharingMode VkObjectMaps::GetSharingMode(eGPUBufferSharingMode mode) {
         return VK_SHARING_MODE_CONCURRENT;
     }
 }
+
+VkIndexType VkObjectMaps::GetIndexType(eRenderType type) {
+    switch (type) {
+    case RENDER_TYPE_VEC2:
+    case RENDER_TYPE_VEC3:
+    case RENDER_TYPE_VEC4:
+    case RENDER_TYPE_MAT2:
+    case RENDER_TYPE_MAT3:
+    case RENDER_TYPE_MAT4:
+    case RENDER_TYPE_FLOAT:
+    case RENDER_TYPE_DOUBLE:
+    case RENDER_TYPE_INT:
+    case RENDER_TYPE_UINT:
+    case RENDER_TYPE_INT16_T:
+        return VK_INDEX_TYPE_NONE_KHR;
+    case RENDER_TYPE_UINT16_T:
+        return VK_INDEX_TYPE_UINT16;
+    }
+}

@@ -2,8 +2,10 @@
 
 #include "util/ImGUIHelper.h"
 #include "util/display/RenderSystem.h"
-#include "util/display/buffer/GPUBuffer.h"
+#include "util/display/buffer/IndexBuffer.h"
+#include "util/display/buffer/VertexBuffer.h"
 #include "util/display/pipeline/GraphicsPipeline.h"
+#include "util/display/pipeline/Type.h"
 #include "util/display/pipeline/VertexFormat.h"
 #include "util/Constants.h"
 #include "util/display/Window.h"
@@ -19,8 +21,8 @@ static GraphicsPipeline sTestPipeline = GraphicsPipeline("test_vert.spv", "test_
                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
                             .CullMode(RENDER_CULL_MODE_BACK)
                             .Vertex(sTestFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST);
-static GPUBuffer sTestBuffer = GPUBuffer(GPU_BUFFER_SHARING_MODE_EXCLUSIVE, 21 * sizeof(float))
-                            .Usage(GPU_BUFFER_USAGE_VERTEX_BUFFER);
+static VertexBuffer sTestVertexBuffer = VertexBuffer(4, sTestFormat);
+static IndexBuffer sTestIndexBuffer = IndexBuffer(2, RENDER_TYPE_UINT16_T);
 
 bool App::sRunning = true;
 
@@ -51,16 +53,26 @@ void App::Init() {
     // ImGUIHelper::Initialize();
 
     sTestPipeline.Build();
-    sTestBuffer.Build();
+    sTestVertexBuffer.Build();
+    sTestIndexBuffer.Build();
 
-    float vertices[21] = {
+    float vertices[28] = {
         // Position                          Color
-        0.0f, -0.75f, 0.0f,     1.0f, 0.0f, 0.0f, 1.0f,
-        0.75f, 0.75f, 0.0f,     0.0f, 1.0f, 0.0f, 1.0f,
-        -0.75f, 0.75f, 0.0f,     0.0f, 0.0f, 1.0f, 1.0f
+        -0.75f, -0.75f, 0.0f,     1.0f, 0.0f, 0.0f, 1.0f,
+        0.75f, -0.75f, 0.0f,     0.0f, 1.0f, 0.0f, 1.0f,
+        0.75f, 0.75f, 0.0f,     0.0f, 0.0f, 1.0f, 1.0f,
+        -0.75f, 0.75f, 0.0f,     1.0f, 0.0f, 1.0f, 1.0f,
     };
 
-    sTestBuffer.Allocate(vertices, 21 * sizeof(float));
+    uint16_t indices[6] = {
+        // First triangle.
+        0, 1, 2,
+        // Second triangle.
+        2, 3, 0
+    };
+
+    sTestVertexBuffer.Allocate(vertices);
+    sTestIndexBuffer.Allocate(indices);
 }
 
 void App::MainLoop() {
@@ -79,9 +91,10 @@ void App::MainLoop() {
     RenderSystem::BeginDrawFrame();
 
     sTestPipeline.CmdBind();
-    sTestBuffer.CmdBind();
+    RenderSystem::CmdBindVertexBuffer(sTestVertexBuffer);
+    RenderSystem::CmdBindIndexBuffer(sTestIndexBuffer);
 
-    RenderSystem::CmdDraw(3, 1);
+    RenderSystem::CmdDrawIndexed(6, 1);
 
     // ImGUIHelper::CmdDraw();
 
@@ -93,7 +106,8 @@ void App::Cleanup() {
 
     // ImGUIHelper::Destroy();
 
-    sTestBuffer.Delete();
+    sTestVertexBuffer.Delete();
+    sTestIndexBuffer.Delete();
     sTestPipeline.Delete();
 
     RenderSystem::Destroy();

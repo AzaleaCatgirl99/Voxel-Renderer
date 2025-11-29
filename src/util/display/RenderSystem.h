@@ -10,6 +10,9 @@
 #include "util/Logger.h"
 #include <vector>
 
+class VertexBuffer;
+class IndexBuffer;
+
 // Renderer implementation that uses Vulkan.
 class RenderSystem {
 public:
@@ -22,19 +25,24 @@ public:
     static void UpdateDisplay();
     static void BeginDrawFrame();
     static void EndDrawFrame();
+    static void CmdBindVertexBuffers(VertexBuffer* buffers, uint32_t n);
+    static void CmdBindVertexBuffer(VertexBuffer& buffer);
+    static void CmdBindIndexBuffer(IndexBuffer& buffer);
     static void CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex = 0, uint32_t first_instance = 0);
+    static void CmdDrawIndexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index = 0, uint32_t first_instance = 0);
     static void WaitDevice();
 private:
     friend class GraphicsPipeline;
     friend class GPUBuffer;
     friend class ImGUIHelper;
 
-    struct QueueFamilyIndices {
+    struct QueueFamilies {
         std::optional<uint32_t> m_graphics;
         std::optional<uint32_t> m_presentation;
+        std::optional<uint32_t> m_transfer;
 
         constexpr bool HasEverything() const noexcept {
-            return m_graphics.has_value() && m_presentation.has_value();
+            return m_graphics.has_value() && m_presentation.has_value() && m_transfer.has_value();
         }
     };
 
@@ -72,6 +80,7 @@ private:
     static VkDevice sDevice;
     static VkQueue sGraphicsQueue;
     static VkQueue sPresentationQueue;
+    static VkQueue sTransferQueue;
     static VkSurfaceKHR sSurface;
     static VkSwapchainKHR sSwapChain;
     static std::vector<VkImage> sSwapChainImages;
@@ -81,8 +90,9 @@ private:
     static VkRenderPass sRenderPass;
     static std::vector<VkFramebuffer> sSwapChainFramebuffers;
     static VkCommandPool sCommandPool;
+    static VkCommandPool sTransferCommandPool;
     static uint32_t sCurrentFrame;
-    static QueueFamilyIndices sQueueFamilies;
+    static QueueFamilies sQueueFamilies;
 
     static VkCommandBuffer sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
     static VkSemaphore sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
@@ -116,7 +126,7 @@ private:
     static VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
     static VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     static VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-    static QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
+    static QueueFamilies GetQueueFamilies(VkPhysicalDevice device);
     static SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice device);
     static void CreateLogicalDevice();
     static VkResult CreateDebugUtilsMessengerEXT(
