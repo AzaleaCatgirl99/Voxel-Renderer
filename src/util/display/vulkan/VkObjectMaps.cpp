@@ -102,6 +102,9 @@ VkFormat VkObjectMaps::GetTypeFormat(eRenderType type) {
         return VK_FORMAT_R32_SINT;
     case RENDER_TYPE_UINT:
         return VK_FORMAT_R32_UINT;
+    case RENDER_TYPE_INT16_T:
+    case RENDER_TYPE_UINT16_T:
+        return VK_FORMAT_UNDEFINED;
     }
 }
 

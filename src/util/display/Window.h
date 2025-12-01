@@ -4,6 +4,7 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_main.h>
+#include <glm/glm.hpp>
 #include "util/Constants.h"
 #include "util/Logger.h"
 
@@ -56,9 +57,7 @@ public:
 
     // Gets the window's aspect ratio.
     static constexpr const float ApsectRatio() {
-        float width = 0.0f, height = 0.0f;
-        SDL_GetWindowAspectRatio(sContext, &width, &height);
-        return width / height;
+        return (float)Width() / (float)Height();
     }
 
     // Gets the render pipeline for the window.
@@ -90,6 +89,56 @@ public:
     // Polls the current SDL event.
     static constexpr bool PollEvent() {
         return SDL_PollEvent(&sEvent);
+    }
+
+    // Gets the mouse's X position.
+    static constexpr const float MouseX() {
+        float x;
+        SDL_GetMouseState(&x, nullptr);
+        return x;
+    }
+
+    // Gets the mouse's Y position.
+    static constexpr const float MouseY() {
+        float y;
+        SDL_GetMouseState(nullptr, &y);
+        return y;
+    }
+
+    // Gets the mouse's relative X position.
+    static constexpr const float MouseRelativeX() {
+        float x;
+        SDL_GetRelativeMouseState(&x, nullptr);
+        return x;
+    }
+
+    // Gets the mouse's relative Y position.
+    static constexpr const float MouseRelativeY() {
+        float y;
+        SDL_GetRelativeMouseState(nullptr, &y);
+        return y;
+    }
+
+    // Gets the mouse's relative position.
+    static constexpr const glm::vec2 MouseRelativePos() {
+        glm::vec2 ret;
+        SDL_GetRelativeMouseState(&ret.x, &ret.y);
+        return ret;
+    }
+
+    // Sets the mouse as grabbed by the window.
+    static constexpr void SetMouseGrabbed(bool grabbed) {
+        if (grabbed)
+            SDL_HideCursor();
+        else
+            SDL_ShowCursor();
+
+        SDL_SetWindowRelativeMouseMode(sContext, grabbed);
+    }
+
+    // Sets the mouse position.
+    static constexpr void SetMousePosition(float x, float y) {
+        SDL_WarpMouseInWindow(sContext, x, y);
     }
 private:
     friend class RenderSystem;

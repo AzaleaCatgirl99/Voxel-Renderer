@@ -5,8 +5,14 @@ layout(location = 1) in vec4 inColor;
 
 layout(location = 0) out vec4 fragColor;
 
+layout(binding = 0) uniform Camera {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} camera;
+
 void main() {
-    gl_Position = vec4(inPosition, 1.0);
+    gl_Position = camera.proj * camera.view * camera.model * vec4(inPosition, 1.0);
 
     fragColor = inColor;
 }

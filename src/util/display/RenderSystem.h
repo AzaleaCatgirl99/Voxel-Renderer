@@ -14,7 +14,7 @@ class VertexBuffer;
 class IndexBuffer;
 
 // Renderer implementation that uses Vulkan.
-class RenderSystem {
+class RenderSystem final {
 public:
     struct Settings {
         eRenderSwapInterval m_swapInterval;
@@ -35,6 +35,7 @@ private:
     friend class GraphicsPipeline;
     friend class GPUBuffer;
     friend class ImGUIHelper;
+    friend class UniformBuffer;
 
     struct QueueFamilies {
         std::optional<uint32_t> m_graphics;

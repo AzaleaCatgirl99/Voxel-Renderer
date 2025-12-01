@@ -1,8 +1,13 @@
 #include "App.h"
 
+#include <glm/trigonometric.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include "renderer/Camera.h"
 #include "util/ImGUIHelper.h"
+#include "util/data/Std140Calc.h"
 #include "util/display/RenderSystem.h"
 #include "util/display/buffer/IndexBuffer.h"
+#include "util/display/buffer/UniformBuffer.h"
 #include "util/display/buffer/VertexBuffer.h"
 #include "util/display/pipeline/GraphicsPipeline.h"
 #include "util/display/pipeline/Type.h"
@@ -12,19 +17,31 @@
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <SDL3/SDL_timer.h>
+
+struct CamTest {
+    glm::mat4 m_model;
+    glm::mat4 m_view;
+    glm::mat4 m_proj;
+};
 
 static const VertexFormat sTestFormat = VertexFormat()
                             .Element(RENDER_TYPE_VEC3)
                             .Element(RENDER_TYPE_VEC4);
+static const uint32_t sUniformSize = Std140Calc().PutMat4().PutMat4().PutMat4().Get();
+static UniformBuffer sTestUniformBuffer = UniformBuffer(sUniformSize);
 static GraphicsPipeline sTestPipeline = GraphicsPipeline("test_vert.spv", "test_frag.spv")
                             .PolygonMode(RENDER_POLYGON_MODE_FILL)
                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
                             .CullMode(RENDER_CULL_MODE_BACK)
-                            .Vertex(sTestFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST);
+                            .Vertex(sTestFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST)
+                            .Uniform(0, RENDER_SHADER_STAGE_VERTEX, &sTestUniformBuffer);
 static VertexBuffer sTestVertexBuffer = VertexBuffer(4, sTestFormat);
 static IndexBuffer sTestIndexBuffer = IndexBuffer(2, RENDER_TYPE_UINT16_T);
 
 bool App::sRunning = true;
+float App::sDeltaTime = 0.0f;
+float App::sLastFrame = 0.0f;
 
 void App::Run() {
     Init();
@@ -52,6 +69,7 @@ void App::Init() {
 
     // ImGUIHelper::Initialize();
 
+    sTestUniformBuffer.Build();
     sTestPipeline.Build();
     sTestVertexBuffer.Build();
     sTestIndexBuffer.Build();
@@ -83,10 +101,31 @@ void App::MainLoop() {
             break;
         }
 
+        Camera::TickEvents();
+
         // ImGUIHelper::ProcessEvents();
     }
 
+    float frame = SDL_GetTicks();
+    sDeltaTime = frame - sLastFrame;
+    sLastFrame = frame;
+
     // ImGUIHelper::BeginDraw();
+
+    Camera::Update();
+
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, {8.0f, 0.0f, 0.0f});
+    model = glm::rotate(model, glm::radians(-90.0f), {0.0f, 1.0f, 0.0f});
+    model[1][1] *= -1;
+
+    CamTest camTest = {
+        .m_model = model,
+        .m_view = Camera::GetView(),
+        .m_proj = Camera::GetProj()
+    };
+
+    sTestUniformBuffer.Update(&camTest);
 
     RenderSystem::BeginDrawFrame();
 
@@ -108,6 +147,7 @@ void App::Cleanup() {
 
     sTestVertexBuffer.Delete();
     sTestIndexBuffer.Delete();
+    sTestUniformBuffer.Delete();
     sTestPipeline.Delete();
 
     RenderSystem::Destroy();

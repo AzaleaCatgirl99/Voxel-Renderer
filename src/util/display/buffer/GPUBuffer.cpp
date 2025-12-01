@@ -39,6 +39,10 @@ void GPUBuffer::Allocate(const void* data, uint32_t size, uint32_t offset) {
     vkUnmapMemory(RenderSystem::sDevice, m_memory);
 }
 
+void GPUBuffer::MapData(void** data, uint32_t size, uint32_t offset) {
+    vkMapMemory(RenderSystem::sDevice, m_memory, offset, size, 0, data);
+}
+
 void GPUBuffer::Copy(GPUBuffer& src, uint32_t size, uint32_t src_offset, uint32_t dst_offset) {
     VkCommandBufferAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,

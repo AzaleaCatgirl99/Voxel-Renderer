@@ -64,12 +64,14 @@ public:
 
     void Build();
     void Allocate(const void* data, uint32_t size, uint32_t offset = 0);
+    void MapData(void** data, uint32_t size, uint32_t offset = 0);
     void Copy(GPUBuffer& src, uint32_t size, uint32_t src_offset = 0, uint32_t dst_offset = 0);
     void Delete();
 private:
     friend class RenderSystem;
     friend class VertexBuffer;
     friend class IndexBuffer;
+    friend class GraphicsPipeline;
 
     eGPUBufferSharingMode m_sharingMode;
     uint32_t m_size = 0;
