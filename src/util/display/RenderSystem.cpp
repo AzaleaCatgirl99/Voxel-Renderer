@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "util/display/pipeline/GraphicsPipeline.h"
 #include "util/display/vulkan/VkObjectMaps.h"
 #include "util/display/vulkan/VkUtil.h"
 #include "util/Constants.h"
@@ -83,6 +84,8 @@ VkDebugUtilsMessengerCreateInfoEXT RenderSystem::sDebugMessengerInfo = {
     .pUserData = VK_NULL_HANDLE
 };
 
+std::deque<RenderSystem::Command> RenderSystem::sQueuedCommands;
+
 void RenderSystem::Initialize(const Settings& settings) {
     sSettings = settings;
 
@@ -132,11 +135,26 @@ void RenderSystem::Destroy() {
     vkDestroyInstance(sInstance, VK_NULL_HANDLE);
 }
 
-void RenderSystem::UpdateDisplay() {
-    RecreateSwapChain();
+void RenderSystem::RecreateSwapChain() {
+    if (Window::sMinimized)
+        return;
+
+    vkDeviceWaitIdle(sDevice);
+
+    for (auto framebuffer : sSwapChainFramebuffers)
+        vkDestroyFramebuffer(sDevice, framebuffer, VK_NULL_HANDLE);
+
+    for (auto imageView : sSwapChainImageViews)
+        vkDestroyImageView(sDevice, imageView, VK_NULL_HANDLE);
+
+    vkDestroySwapchainKHR(sDevice, sSwapChain, VK_NULL_HANDLE);
+
+    CreateSwapChain();
+    CreateImageViews();
+    CreateFramebuffers();
 }
 
-void RenderSystem::BeginDrawFrame() {
+void RenderSystem::UpdateDisplay() {
     vkWaitForFences(sDevice, 1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
     vkResetFences(sDevice, 1, &sInFlightFences[sCurrentFrame]);
 
@@ -146,9 +164,31 @@ void RenderSystem::BeginDrawFrame() {
 
     vkResetCommandBuffer(sCommandBuffers[sCurrentFrame], 0);
     BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
-}
 
-void RenderSystem::EndDrawFrame() {
+    // Goes through all queued commands and records them for the command buffer.
+    VkDeviceSize offset = 0;
+    for (Command& cmd : sQueuedCommands) {
+        switch (cmd.m_type) {
+        case CMD_TYPE_BIND_VERTEX_BUFFER:
+            vkCmdBindVertexBuffers(sCommandBuffers[sCurrentFrame], 0, 1, &(*reinterpret_cast<VertexBuffer*>(cmd.m_data)).m_buffer.m_handler, &offset);
+            break;
+        case CMD_TYPE_BIND_INDEX_BUFFER:
+            vkCmdBindIndexBuffer(sCommandBuffers[sCurrentFrame], (*reinterpret_cast<IndexBuffer*>(cmd.m_data)).m_buffer.m_handler, 0, VkObjectMaps::GetIndexType((*reinterpret_cast<IndexBuffer*>(cmd.m_data)).m_type));
+            break;
+        case CMD_TYPE_BIND_PIPELINE:
+            (*reinterpret_cast<GraphicsPipeline*>(cmd.m_data)).CmdBind();
+            break;
+        case CMD_TYPE_DRAW:
+            vkCmdDraw(sCommandBuffers[sCurrentFrame], cmd.m_draw.m_drawCount, cmd.m_draw.m_instanceCount, cmd.m_draw.m_drawOffset, cmd.m_draw.m_instanceOffset);
+            break;
+        case CMD_TYPE_DRAW_INDEXED:
+            vkCmdDrawIndexed(sCommandBuffers[sCurrentFrame], cmd.m_draw.m_drawCount, cmd.m_draw.m_instanceCount, cmd.m_draw.m_drawOffset, 0, cmd.m_draw.m_instanceOffset);
+            break;
+        }
+
+        sQueuedCommands.pop_front();
+    }
+
     EndRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
     
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -180,37 +220,6 @@ void RenderSystem::EndDrawFrame() {
 
     // Advance to the next frame.
     sCurrentFrame = (sCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void RenderSystem::CmdBindVertexBuffers(VertexBuffer* buffers, uint32_t n) {
-    VkBuffer _buffers[n];
-    for (uint32_t i = 0; i < n; i++)
-        _buffers[i] = buffers[i].m_buffer.m_handler;
-
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(sCommandBuffers[sCurrentFrame], 0, n, _buffers, &offset);
-}
-
-void RenderSystem::CmdBindVertexBuffer(VertexBuffer& buffer) {
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(sCommandBuffers[sCurrentFrame], 0, 1, &buffer.m_buffer.m_handler, &offset);
-}
-
-void RenderSystem::CmdBindIndexBuffer(IndexBuffer& buffer) {
-    // TODO setup custom index type.
-    vkCmdBindIndexBuffer(sCommandBuffers[sCurrentFrame], buffer.m_buffer.m_handler, 0, VkObjectMaps::GetIndexType(buffer.m_type));
-}
-
-void RenderSystem::CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
-    vkCmdDraw(sCommandBuffers[sCurrentFrame], vertex_count, instance_count, first_vertex, first_instance);
-}
-
-void RenderSystem::CmdDrawIndexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, uint32_t first_instance) {
-    vkCmdDrawIndexed(sCommandBuffers[sCurrentFrame], index_count, instance_count, first_index, 0, first_instance);
-}
-
-void RenderSystem::WaitDevice() {
-    vkDeviceWaitIdle(sDevice);
 }
 
 void RenderSystem::CreateInstance() {
@@ -866,25 +875,6 @@ void RenderSystem::EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
     VkResult result = vkEndCommandBuffer(commandBuffer);
     VkResultHandler::CheckResult(result, "Failed to record command buffer!");
-}
-
-void RenderSystem::RecreateSwapChain() {
-    if (Window::sMinimized)
-        return;
-
-    vkDeviceWaitIdle(sDevice);
-
-    for (auto framebuffer : sSwapChainFramebuffers)
-        vkDestroyFramebuffer(sDevice, framebuffer, VK_NULL_HANDLE);
-
-    for (auto imageView : sSwapChainImageViews)
-        vkDestroyImageView(sDevice, imageView, VK_NULL_HANDLE);
-
-    vkDestroySwapchainKHR(sDevice, sSwapChain, VK_NULL_HANDLE);
-
-    CreateSwapChain();
-    CreateImageViews();
-    CreateFramebuffers();
 }
 
 uint32_t RenderSystem::FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties) {

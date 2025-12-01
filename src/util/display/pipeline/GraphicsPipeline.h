@@ -82,11 +82,12 @@ public:
     }
 
     void Build();
-    void CmdBind();
     void Delete();
 private:
     friend class RenderSystem;
     friend class UniformBuffer;
+
+    void CmdBind();
 
     const char* m_vertex;
     const char* m_fragment;

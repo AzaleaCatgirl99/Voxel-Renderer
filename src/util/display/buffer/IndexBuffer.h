@@ -9,10 +9,10 @@
 class IndexBuffer final {
 public:
     constexpr IndexBuffer(uint32_t size, eRenderType type) {
-        m_buffer = GPUBuffer(SHARING_MODE, (size * 3) * GetRenderTypeSize(type))
+        m_buffer = GPUBuffer(SHARING_MODE, size * GetRenderTypeSize(type))
                     .UsageFlag(GPU_BUFFER_USAGE_TRANSFER_DST).UsageFlag(GPU_BUFFER_USAGE_INDEX_BUFFER)
                     .MemoryPropertiesFlag(GPU_BUFFER_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        m_size = (size * 3) * GetRenderTypeSize(type);
+        m_size = size * GetRenderTypeSize(type);
         m_type = type;
     }
 
