@@ -10,6 +10,7 @@
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <Test.cpp>
 
 static const VertexFormat sTestFormat = VertexFormat()
                             .Element(RENDER_TYPE_VEC3)
@@ -25,12 +26,14 @@ static GPUBuffer sTestBuffer = GPUBuffer(GPU_BUFFER_SHARING_MODE_EXCLUSIVE, 21 *
 bool App::sRunning = true;
 
 void App::Run() {
-    Init();
+    Test();
+    
+    // Init();
 
-    while (sRunning)
-        MainLoop();
+    // while (sRunning)
+    //     MainLoop();
 
-    Cleanup();
+    // Cleanup();
 }
 
 void App::Init() {

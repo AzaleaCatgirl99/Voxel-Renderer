@@ -3,6 +3,7 @@
 #include <vector>
 #include <queue>
 #include <cstdint>
+#include <iostream>
 
 // Class for handling sparse vectors.
 template<typename DataType, typename IndexType>

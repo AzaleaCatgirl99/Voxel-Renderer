@@ -12,4 +12,11 @@ public:
             m_vertices.reserve(32768);
         }
     };
+
+    struct HyperGreedy {
+        std::vector<uint32_t> m_vertices;
+        std::vector<uint32_t> m_mortonBlocks;
+
+        HyperGreedy() = default;
+    };
 };
