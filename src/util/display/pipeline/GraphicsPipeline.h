@@ -1,13 +1,17 @@
 #pragma once
 
+#include "util/display/RenderSystem.h"
 #include "util/display/pipeline/Scissor.h"
 #include "util/display/pipeline/VertexFormat.h"
 #include "util/display/pipeline/Viewport.h"
 #include "util/Constants.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <vulkan/vulkan.h>
+
+class UniformBuffer;
 
 // Utility for creating graphics pipelines.
 class GraphicsPipeline final {
@@ -60,11 +64,30 @@ public:
         return *this;
     }
 
+    constexpr GraphicsPipeline& Uniform(uint32_t binding, eRenderShaderStage stage, UniformBuffer* ubo, uint32_t count = 1) noexcept {
+        if (m_layoutBinding.has_value())
+            return *this;
+
+        m_layoutBinding = {
+            .binding = binding,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = count,
+            .stageFlags = stage,
+            .pImmutableSamplers = VK_NULL_HANDLE
+        };
+
+        m_ubo = ubo;
+
+        return *this;
+    }
+
     void Build();
-    void CmdBind();
     void Delete();
 private:
     friend class RenderSystem;
+    friend class UniformBuffer;
+
+    void CmdBind();
 
     const char* m_vertex;
     const char* m_fragment;
@@ -77,4 +100,9 @@ private:
     std::optional<eRenderVertexMode> m_vertexMode;
     VkPipeline m_handler = VK_NULL_HANDLE;
     VkPipelineLayout m_layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
+    std::optional<VkDescriptorSetLayoutBinding> m_layoutBinding;
+    UniformBuffer* m_ubo = nullptr;
+    VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSet m_descriptorSets[RenderSystem::MAX_FRAMES_IN_FLIGHT];
 };

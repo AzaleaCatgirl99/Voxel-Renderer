@@ -56,7 +56,7 @@ void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline 
 
 bool Window::EventWatcher(void* app_data, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_EXPOSED)
-        RenderSystem::UpdateDisplay();
+        RenderSystem::RecreateSwapChain();
 
     if (event->type == SDL_EVENT_WINDOW_MINIMIZED)
         sMinimized = true;

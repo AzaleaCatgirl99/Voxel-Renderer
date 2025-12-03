@@ -10,11 +10,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "util/display/pipeline/GraphicsPipeline.h"
 #include "util/display/vulkan/VkObjectMaps.h"
 #include "util/display/vulkan/VkUtil.h"
 #include "util/Constants.h"
 #include "util/display/Window.h"
 #include "util/display/vulkan/VkResultHandler.h"
+#include "util/display/buffer/VertexBuffer.h"
+#include "util/display/buffer/IndexBuffer.h"
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
 
@@ -25,6 +28,7 @@ VkPhysicalDevice RenderSystem::sPhysicalDevice = VK_NULL_HANDLE;
 VkDevice RenderSystem::sDevice = VK_NULL_HANDLE;
 VkQueue RenderSystem::sGraphicsQueue = VK_NULL_HANDLE;
 VkQueue RenderSystem::sPresentationQueue = VK_NULL_HANDLE;
+VkQueue RenderSystem::sTransferQueue = VK_NULL_HANDLE;
 VkSurfaceKHR RenderSystem::sSurface = VK_NULL_HANDLE;
 VkSwapchainKHR RenderSystem::sSwapChain = VK_NULL_HANDLE;
 std::vector<VkImage> RenderSystem::sSwapChainImages;
@@ -34,8 +38,9 @@ std::vector<VkImageView> RenderSystem::sSwapChainImageViews;
 VkRenderPass RenderSystem::sRenderPass = VK_NULL_HANDLE;
 std::vector<VkFramebuffer> RenderSystem::sSwapChainFramebuffers;
 VkCommandPool RenderSystem::sCommandPool = VK_NULL_HANDLE;
+VkCommandPool RenderSystem::sTransferCommandPool = VK_NULL_HANDLE;
 uint32_t RenderSystem::sCurrentFrame = 0;
-RenderSystem::QueueFamilyIndices RenderSystem::sQueueFamilies;
+RenderSystem::QueueFamilies RenderSystem::sQueueFamilies;
 
 VkCommandBuffer RenderSystem::sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
 VkSemaphore RenderSystem::sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
@@ -79,6 +84,8 @@ VkDebugUtilsMessengerCreateInfoEXT RenderSystem::sDebugMessengerInfo = {
     .pUserData = VK_NULL_HANDLE
 };
 
+std::deque<RenderSystem::Command> RenderSystem::sQueuedCommands;
+
 void RenderSystem::Initialize(const Settings& settings) {
     sSettings = settings;
 
@@ -105,6 +112,7 @@ void RenderSystem::Destroy() {
     for (size_t i = 0; i < sSwapChainImages.size(); i++)
         vkDestroySemaphore(sDevice, sRenderFinishedSemaphores[i], VK_NULL_HANDLE);
 
+    vkDestroyCommandPool(sDevice, sTransferCommandPool, VK_NULL_HANDLE);
     vkDestroyCommandPool(sDevice, sCommandPool, VK_NULL_HANDLE);
 
     for (auto framebuffer : sSwapChainFramebuffers)
@@ -127,11 +135,26 @@ void RenderSystem::Destroy() {
     vkDestroyInstance(sInstance, VK_NULL_HANDLE);
 }
 
-void RenderSystem::UpdateDisplay() {
-    RecreateSwapChain();
+void RenderSystem::RecreateSwapChain() {
+    if (Window::sMinimized)
+        return;
+
+    vkDeviceWaitIdle(sDevice);
+
+    for (auto framebuffer : sSwapChainFramebuffers)
+        vkDestroyFramebuffer(sDevice, framebuffer, VK_NULL_HANDLE);
+
+    for (auto imageView : sSwapChainImageViews)
+        vkDestroyImageView(sDevice, imageView, VK_NULL_HANDLE);
+
+    vkDestroySwapchainKHR(sDevice, sSwapChain, VK_NULL_HANDLE);
+
+    CreateSwapChain();
+    CreateImageViews();
+    CreateFramebuffers();
 }
 
-void RenderSystem::BeginDrawFrame() {
+void RenderSystem::UpdateDisplay() {
     vkWaitForFences(sDevice, 1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
     vkResetFences(sDevice, 1, &sInFlightFences[sCurrentFrame]);
 
@@ -141,9 +164,31 @@ void RenderSystem::BeginDrawFrame() {
 
     vkResetCommandBuffer(sCommandBuffers[sCurrentFrame], 0);
     BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
-}
 
-void RenderSystem::EndDrawFrame() {
+    // Goes through all queued commands and records them for the command buffer.
+    VkDeviceSize offset = 0;
+    for (Command& cmd : sQueuedCommands) {
+        switch (cmd.m_type) {
+        case CMD_TYPE_BIND_VERTEX_BUFFER:
+            vkCmdBindVertexBuffers(sCommandBuffers[sCurrentFrame], 0, 1, &(*reinterpret_cast<VertexBuffer*>(cmd.m_data)).m_buffer.m_handler, &offset);
+            break;
+        case CMD_TYPE_BIND_INDEX_BUFFER:
+            vkCmdBindIndexBuffer(sCommandBuffers[sCurrentFrame], (*reinterpret_cast<IndexBuffer*>(cmd.m_data)).m_buffer.m_handler, 0, VkObjectMaps::GetIndexType((*reinterpret_cast<IndexBuffer*>(cmd.m_data)).m_type));
+            break;
+        case CMD_TYPE_BIND_PIPELINE:
+            (*reinterpret_cast<GraphicsPipeline*>(cmd.m_data)).CmdBind();
+            break;
+        case CMD_TYPE_DRAW:
+            vkCmdDraw(sCommandBuffers[sCurrentFrame], cmd.m_draw.m_drawCount, cmd.m_draw.m_instanceCount, cmd.m_draw.m_drawOffset, cmd.m_draw.m_instanceOffset);
+            break;
+        case CMD_TYPE_DRAW_INDEXED:
+            vkCmdDrawIndexed(sCommandBuffers[sCurrentFrame], cmd.m_draw.m_drawCount, cmd.m_draw.m_instanceCount, cmd.m_draw.m_drawOffset, 0, cmd.m_draw.m_instanceOffset);
+            break;
+        }
+
+        sQueuedCommands.pop_front();
+    }
+
     EndRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
     
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -175,14 +220,6 @@ void RenderSystem::EndDrawFrame() {
 
     // Advance to the next frame.
     sCurrentFrame = (sCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void RenderSystem::CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
-    vkCmdDraw(sCommandBuffers[sCurrentFrame], vertex_count, instance_count, first_vertex, first_instance);
-}
-
-void RenderSystem::WaitDevice() {
-    vkDeviceWaitIdle(sDevice);
 }
 
 void RenderSystem::CreateInstance() {
@@ -361,7 +398,7 @@ void RenderSystem::SelectBestPhysicalDevice() {
 }
 
 bool RenderSystem::IsPhysicalDeviceUsable(VkPhysicalDevice device) {
-    QueueFamilyIndices indices = GetQueueFamilies(device);
+    QueueFamilies indices = GetQueueFamilies(device);
 
     // Ensure all queue families are supported.
     if (!indices.HasEverything())
@@ -398,8 +435,8 @@ size_t RenderSystem::GetPhysicalDeviceScore(VkPhysicalDevice device) {
     return score;
 }
 
-RenderSystem::QueueFamilyIndices RenderSystem::GetQueueFamilies(VkPhysicalDevice device) {
-    QueueFamilyIndices indices;
+RenderSystem::QueueFamilies RenderSystem::GetQueueFamilies(VkPhysicalDevice device) {
+    QueueFamilies indices;
 
     // Gets the amount of queue families on the device.
     uint32_t count = 0;
@@ -416,6 +453,14 @@ RenderSystem::QueueFamilyIndices RenderSystem::GetQueueFamilies(VkPhysicalDevice
 
         if (SDL_Vulkan_GetPresentationSupport(sInstance, device, i))
             indices.m_presentation = i;
+
+#ifdef SDL_PLATFORM_APPLE
+        if (families[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+            indices.m_transfer = i;
+#else
+        if ((families[i].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+            indices.m_transfer = i;
+#endif
 
         // Breaks if everything has already been added to the indices.
         if (indices.HasEverything())
@@ -434,8 +479,11 @@ void RenderSystem::CreateLogicalDevice() {
     if (!sQueueFamilies.m_presentation.has_value())
         throw sLogger.RuntimeError("Failed to create logical device! No presentation family found.");
 
+    if (!sQueueFamilies.m_transfer.has_value())
+        throw sLogger.RuntimeError("Failed to create logical device! No transfer family found.");
+
     // Gets the unique queue families that exist.
-    std::set<uint32_t> uniqueQueueFamilies = {sQueueFamilies.m_graphics.value(), sQueueFamilies.m_presentation.value()};
+    std::set<uint32_t> uniqueQueueFamilies = {sQueueFamilies.m_graphics.value(), sQueueFamilies.m_presentation.value(), sQueueFamilies.m_transfer.value()};
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     float queuePriority = 1.0f;
 
@@ -476,6 +524,9 @@ void RenderSystem::CreateLogicalDevice() {
 
     vkGetDeviceQueue(sDevice, sQueueFamilies.m_graphics.value(), 0, &sGraphicsQueue);
     vkGetDeviceQueue(sDevice, sQueueFamilies.m_presentation.value(), uniqueQueueFamilies.size() < 2 ? 0 : 1, &sPresentationQueue);
+
+    uint32_t transferIndex = uniqueQueueFamilies.size() < 2 ? 0 : uniqueQueueFamilies.size() < 3 ? 1 : uniqueQueueFamilies.size() - 1;
+    vkGetDeviceQueue(sDevice, sQueueFamilies.m_transfer.value(), transferIndex, &sTransferQueue);
 }
 
 void RenderSystem::CreateSurface() {
@@ -722,6 +773,15 @@ void RenderSystem::CreateCommandPool() {
 
     VkResult result = vkCreateCommandPool(sDevice, &poolInfo, VK_NULL_HANDLE, &sCommandPool);
     VkResultHandler::CheckResult(result, "Failed to create command pool!", "Created command pool.");
+
+    VkCommandPoolCreateInfo transferPoolInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = sQueueFamilies.m_transfer.value()
+    };
+
+    result = vkCreateCommandPool(sDevice, &transferPoolInfo, VK_NULL_HANDLE, &sTransferCommandPool);
+    VkResultHandler::CheckResult(result, "Failed to create transfer command pool!", "Created transfer command pool.");
 }
 
 void RenderSystem::CreateCommandBuffer() {
@@ -815,25 +875,6 @@ void RenderSystem::EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
     VkResult result = vkEndCommandBuffer(commandBuffer);
     VkResultHandler::CheckResult(result, "Failed to record command buffer!");
-}
-
-void RenderSystem::RecreateSwapChain() {
-    if (Window::sMinimized)
-        return;
-
-    vkDeviceWaitIdle(sDevice);
-
-    for (auto framebuffer : sSwapChainFramebuffers)
-        vkDestroyFramebuffer(sDevice, framebuffer, VK_NULL_HANDLE);
-
-    for (auto imageView : sSwapChainImageViews)
-        vkDestroyImageView(sDevice, imageView, VK_NULL_HANDLE);
-
-    vkDestroySwapchainKHR(sDevice, sSwapChain, VK_NULL_HANDLE);
-
-    CreateSwapChain();
-    CreateImageViews();
-    CreateFramebuffers();
 }
 
 uint32_t RenderSystem::FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties) {

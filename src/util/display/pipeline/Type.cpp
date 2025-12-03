@@ -1,4 +1,5 @@
 #include "util/display/pipeline/Type.h"
+#include <cstdint>
 
 const size_t GetRenderTypeCount(eRenderType type) {
     switch (type) {
@@ -36,5 +37,9 @@ const size_t GetRenderTypeSize(eRenderType type) {
         return sizeof(int);
     case RENDER_TYPE_UINT:
         return sizeof(unsigned int);
+    case RENDER_TYPE_INT16_T:
+        return sizeof(int16_t);
+    case RENDER_TYPE_UINT16_T:
+        return sizeof(uint16_t);
     }
 }

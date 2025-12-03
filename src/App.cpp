@@ -1,29 +1,20 @@
 #include "App.h"
 
+#include "renderer/Camera.h"
+#include "renderer/CubeRenderer.h"
 #include "util/ImGUIHelper.h"
 #include "util/display/RenderSystem.h"
-#include "util/display/buffer/GPUBuffer.h"
-#include "util/display/pipeline/GraphicsPipeline.h"
-#include "util/display/pipeline/VertexFormat.h"
 #include "util/Constants.h"
 #include "util/display/Window.h"
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <Test.cpp>
-
-static const VertexFormat sTestFormat = VertexFormat()
-                            .Element(RENDER_TYPE_VEC3)
-                            .Element(RENDER_TYPE_VEC4);
-static GraphicsPipeline sTestPipeline = GraphicsPipeline("test_vert.spv", "test_frag.spv")
-                            .PolygonMode(RENDER_POLYGON_MODE_FILL)
-                            .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
-                            .CullMode(RENDER_CULL_MODE_BACK)
-                            .Vertex(sTestFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST);
-static GPUBuffer sTestBuffer = GPUBuffer(GPU_BUFFER_SHARING_MODE_EXCLUSIVE, 21 * sizeof(float))
-                            .Usage(GPU_BUFFER_USAGE_VERTEX_BUFFER);
+#include <SDL3/SDL_timer.h>
 
 bool App::sRunning = true;
+float App::sDeltaTime = 0.0f;
+float App::sLastFrame = 0.0f;
 
 void App::Run() {
     Test();
@@ -53,17 +44,7 @@ void App::Init() {
 
     // ImGUIHelper::Initialize();
 
-    sTestPipeline.Build();
-    sTestBuffer.Build();
-
-    float vertices[21] = {
-        // Position                          Color
-        0.0f, -0.75f, 0.0f,     1.0f, 0.0f, 0.0f, 1.0f,
-        0.75f, 0.75f, 0.0f,     0.0f, 1.0f, 0.0f, 1.0f,
-        -0.75f, 0.75f, 0.0f,     0.0f, 0.0f, 1.0f, 1.0f
-    };
-
-    sTestBuffer.Allocate(vertices, 21 * sizeof(float));
+    CubeRenderer::Initialize();
 }
 
 void App::MainLoop() {
@@ -74,30 +55,34 @@ void App::MainLoop() {
             break;
         }
 
+        Camera::TickEvents();
+
         // ImGUIHelper::ProcessEvents();
     }
 
+    float frame = SDL_GetTicks();
+    sDeltaTime = frame - sLastFrame;
+    sLastFrame = frame;
+
     // ImGUIHelper::BeginDraw();
 
-    RenderSystem::BeginDrawFrame();
+    Camera::Update();
 
-    sTestPipeline.CmdBind();
-    sTestBuffer.CmdBind();
+    CubeRenderer::Settings cube = {
+        .m_pos = {8.0f, 0.0f, 0.0f},
+        .m_rot = {0.0f, -90.0f, 0.0f}
+    };
+    CubeRenderer::Draw(cube);
 
-    RenderSystem::CmdDraw(3, 1);
-
-    // ImGUIHelper::CmdDraw();
-
-    RenderSystem::EndDrawFrame();
+    RenderSystem::UpdateDisplay();
 }
 
 void App::Cleanup() {
-    RenderSystem::WaitDevice();
+    RenderSystem::WaitForDeviceIdle();
 
     // ImGUIHelper::Destroy();
 
-    sTestBuffer.Delete();
-    sTestPipeline.Delete();
+    CubeRenderer::Destroy();
 
     RenderSystem::Destroy();
     Window::Destroy();

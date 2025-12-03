@@ -14,4 +14,5 @@ public:
     static VkCullModeFlags GetCullMode(eRenderCullMode mode);
     static VkFormat GetTypeFormat(eRenderType type);
     static VkSharingMode GetSharingMode(eGPUBufferSharingMode mode);
+    static VkIndexType GetIndexType(eRenderType type);
 };

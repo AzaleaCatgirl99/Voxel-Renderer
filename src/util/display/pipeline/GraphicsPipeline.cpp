@@ -5,6 +5,7 @@
 #include "util/display/vulkan/VkResultHandler.h"
 #include "util/display/vulkan/VkObjectMaps.h"
 #include <SDL3/SDL_filesystem.h>
+#include "util/display/buffer/UniformBuffer.h"
 
 void GraphicsPipeline::Build() {
     std::string basePath = SDL_GetBasePath();
@@ -178,10 +179,20 @@ void GraphicsPipeline::Build() {
     colorBlendingInfo.blendConstants[2] = 0.0f;
     colorBlendingInfo.blendConstants[3] = 0.0f;
 
+    if (m_layoutBinding.has_value()) {
+        VkDescriptorSetLayoutCreateInfo layoutInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = 1,
+            .pBindings = &m_layoutBinding.value()
+        };
+
+        result = vkCreateDescriptorSetLayout(RenderSystem::sDevice, &layoutInfo, VK_NULL_HANDLE, &m_descriptorSetLayout);
+    }
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pSetLayouts = VK_NULL_HANDLE,
+        .setLayoutCount = m_layoutBinding.has_value() ? 1u : 0u,
+        .pSetLayouts = m_layoutBinding.has_value() ? &m_descriptorSetLayout : VK_NULL_HANDLE,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = VK_NULL_HANDLE
     };
@@ -213,13 +224,72 @@ void GraphicsPipeline::Build() {
 
     vkDestroyShaderModule(RenderSystem::sDevice, fragShaderModule, VK_NULL_HANDLE);
     vkDestroyShaderModule(RenderSystem::sDevice, vertShaderModule, VK_NULL_HANDLE);
+
+    if (m_layoutBinding.has_value()) {
+        VkDescriptorPoolSize poolSize = {
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = RenderSystem::MAX_FRAMES_IN_FLIGHT
+        };
+
+        VkDescriptorPoolCreateInfo poolInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .maxSets = RenderSystem::MAX_FRAMES_IN_FLIGHT,
+            .poolSizeCount = 1,
+            .pPoolSizes = &poolSize
+        };
+
+        VkResult result = vkCreateDescriptorPool(RenderSystem::sDevice, &poolInfo, VK_NULL_HANDLE, &m_descriptorPool);
+        VkResultHandler::CheckResult(result, "Failed to create descriptor pool!");
+
+        VkDescriptorSetLayout layouts[RenderSystem::MAX_FRAMES_IN_FLIGHT] = {m_descriptorSetLayout, m_descriptorSetLayout};
+        VkDescriptorSetAllocateInfo allocInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = RenderSystem::MAX_FRAMES_IN_FLIGHT,
+            .pSetLayouts = layouts
+        };
+
+        result = vkAllocateDescriptorSets(RenderSystem::sDevice, &allocInfo, m_descriptorSets);
+        VkResultHandler::CheckResult(result, "Failed to allocate descriptor sets!");
+
+        VkBuffer gpuBuffers[RenderSystem::MAX_FRAMES_IN_FLIGHT] = {m_ubo->m_buffers[0].m_handler, m_ubo->m_buffers[1].m_handler};
+        for (size_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo bufferInfo = {
+                .buffer = gpuBuffers[i],
+                .offset = 0,
+                .range = VK_WHOLE_SIZE
+            };
+
+            VkWriteDescriptorSet descriptorWrite = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = m_descriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .pImageInfo = VK_NULL_HANDLE,
+                .pBufferInfo = &bufferInfo,
+                .pTexelBufferView = VK_NULL_HANDLE
+            };
+
+            vkUpdateDescriptorSets(RenderSystem::sDevice, 1, &descriptorWrite, 0, VK_NULL_HANDLE);
+        }
+    }
 }
 
 void GraphicsPipeline::CmdBind() {
+    if (m_layoutBinding.has_value())
+        vkCmdBindDescriptorSets(RenderSystem::sCommandBuffers[RenderSystem::sCurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &m_descriptorSets[RenderSystem::sCurrentFrame], 0, VK_NULL_HANDLE);
+
     vkCmdBindPipeline(RenderSystem::sCommandBuffers[RenderSystem::sCurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_handler);
 }
 
 void GraphicsPipeline::Delete() {
+    if (m_layoutBinding.has_value()) {
+        vkDestroyDescriptorPool(RenderSystem::sDevice, m_descriptorPool, VK_NULL_HANDLE);
+        vkDestroyDescriptorSetLayout(RenderSystem::sDevice, m_descriptorSetLayout, VK_NULL_HANDLE);
+    }
+
     vkDestroyPipeline(RenderSystem::sDevice, m_handler, VK_NULL_HANDLE);
     vkDestroyPipelineLayout(RenderSystem::sDevice, m_layout, VK_NULL_HANDLE);
 }
