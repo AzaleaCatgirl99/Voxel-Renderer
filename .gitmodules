@@ -7,3 +7,6 @@
 [submodule "lib/stb"]
 	path = lib/stb
 	url = https://github.com/nothings/stb
+[submodule "lib/highway"]
+	path = lib/highway
+	url = https://github.com/google/highway

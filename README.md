@@ -7,6 +7,7 @@ This is a WIP open source voxel renderer made in Vulkan. Beware of bugs and issu
 - Vulkan
 - GLM
 - ImGUI
+- Highway
 
 ## Contributors
 - AzaleaCatgirl99
