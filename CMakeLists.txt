@@ -85,6 +85,7 @@ target_link_libraries(Voxel-Renderer PRIVATE glm::glm-header-only)
 
 # Highway for SIMD
 add_subdirectory(lib/highway EXCLUDE_FROM_ALL)
+target_link_libraries(Voxel-Renderer PRIVATE hwy)
 
 # STB for imaging
 target_include_directories(Voxel-Renderer PRIVATE lib/stb)
