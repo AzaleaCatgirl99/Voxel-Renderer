@@ -45,9 +45,9 @@ private:
     friend class RenderSystem;
 
 #ifdef SDL_PLATFORM_APPLE // Fix for Apple devices only having one queue family.
-    static constexpr const eGPUBufferSharingMode SHARING_MODE = GPU_BUFFER_SHARING_MODE_EXCLUSIVE;
+    static constexpr const eRenderSharingMode SHARING_MODE = RENDER_SHARING_MODE_EXCLUSIVE;
 #else
-    static constexpr const eGPUBufferSharingMode SHARING_MODE = GPU_BUFFER_SHARING_MODE_CONCURRENT;
+    static constexpr const eRenderSharingMode SHARING_MODE = RENDER_SHARING_MODE_CONCURRENT;
 #endif
 
     GPUBuffer m_buffer;

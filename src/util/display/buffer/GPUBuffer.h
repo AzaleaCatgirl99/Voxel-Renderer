@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util/Constants.h"
 #include <cstddef>
 #include <cstdint>
 #include <vulkan/vulkan.h>
@@ -14,11 +15,6 @@ enum eGPUBufferUsage {
     GPU_BUFFER_USAGE_INDEX_BUFFER = 0x00000040,
     GPU_BUFFER_USAGE_VERTEX_BUFFER = 0x00000080,
     GPU_BUFFER_USAGE_INDIRECT_BUFFER = 0x00000100
-};
-
-enum eGPUBufferSharingMode {
-    GPU_BUFFER_SHARING_MODE_EXCLUSIVE,
-    GPU_BUFFER_SHARING_MODE_CONCURRENT
 };
 
 enum eGPUBufferCreateFlag {
@@ -39,7 +35,7 @@ enum eGPUBufferMemoryProperty {
 class GPUBuffer final {
 public:
     constexpr GPUBuffer() = default;
-    constexpr GPUBuffer(eGPUBufferSharingMode mode, uint32_t size) {
+    constexpr GPUBuffer(eRenderSharingMode mode, uint32_t size) {
         m_sharingMode = mode;
         m_size = size;
     }
@@ -72,8 +68,9 @@ private:
     friend class VertexBuffer;
     friend class IndexBuffer;
     friend class GraphicsPipeline;
+    friend class GPUImage;
 
-    eGPUBufferSharingMode m_sharingMode;
+    eRenderSharingMode m_sharingMode;
     uint32_t m_size = 0;
     uint32_t m_usages = 0;
     uint32_t m_flags = 0;

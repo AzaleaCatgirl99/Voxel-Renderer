@@ -16,7 +16,7 @@ public:
 
     constexpr void Build() {
         for (uint32_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
-            m_buffers[i] = GPUBuffer(GPU_BUFFER_SHARING_MODE_EXCLUSIVE, m_size)
+            m_buffers[i] = GPUBuffer(RENDER_SHARING_MODE_EXCLUSIVE, m_size)
                                 .UsageFlag(GPU_BUFFER_USAGE_UNIFORM_BUFFER)
                                 .MemoryPropertiesFlag(GPU_BUFFER_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
                                 .MemoryPropertiesFlag(GPU_BUFFER_MEMORY_PROPERTY_HOST_COHERENT_BIT);

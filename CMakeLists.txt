@@ -83,6 +83,9 @@ target_link_libraries(Voxel-Renderer PRIVATE Vulkan::Vulkan)
 add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
 target_link_libraries(Voxel-Renderer PRIVATE glm::glm-header-only)
 
+# STB for imaging
+target_include_directories(Voxel-Renderer PRIVATE lib/stb)
+
 # ========== Assets ==========
 
 # Deletes the assets dir in the build dir if it exists

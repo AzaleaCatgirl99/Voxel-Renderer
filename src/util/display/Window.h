@@ -4,7 +4,9 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_main.h>
+#include <SDL3/SDL_vulkan.h>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.h>
 #include "util/Constants.h"
 #include "util/Logger.h"
 
@@ -140,10 +142,22 @@ public:
     static constexpr void SetMousePosition(float x, float y) {
         SDL_WarpMouseInWindow(sContext, x, y);
     }
-private:
-    friend class RenderSystem;
-    friend class ImGUIHelper;
 
+    // Creates a Vulkan window surface.
+    static constexpr bool CreateSurface(VkInstance instance, VkSurfaceKHR surface) {
+        return SDL_Vulkan_CreateSurface(sContext, instance, VK_NULL_HANDLE, &surface);
+    }
+
+    // Gets the SDL window context.
+    static constexpr SDL_Window* GetContext() noexcept {
+        return sContext;
+    }
+
+    // Checks if the window is minimized.
+    static constexpr bool IsMinimized() noexcept {
+        return sMinimized;
+    }
+private:
     Window() = default;
 
     // Watches for specific events.

@@ -3,6 +3,7 @@
 #include "util/display/RenderSystem.h"
 #include "util/display/vulkan/VkResultHandler.h"
 #include "util/display/vulkan/VkObjectMaps.h"
+#include "util/display/texture/Texture.h"
 
 void GPUBuffer::Build() {
     VkBufferCreateInfo createInfo = {
@@ -22,7 +23,7 @@ void GPUBuffer::Build() {
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memoryRequirements.size,
-        .memoryTypeIndex = RenderSystem::FindMemoryType(memoryRequirements.memoryTypeBits, m_memProperties)
+        .memoryTypeIndex = RenderSystem::GetGPU()->FindMemoryType(memoryRequirements.memoryTypeBits, m_memProperties)
     };
 
     result = vkAllocateMemory(RenderSystem::sDevice, &allocInfo, VK_NULL_HANDLE, &m_memory);
@@ -44,23 +45,7 @@ void GPUBuffer::MapData(void** data, uint32_t size, uint32_t offset) {
 }
 
 void GPUBuffer::Copy(GPUBuffer& src, uint32_t size, uint32_t src_offset, uint32_t dst_offset) {
-    VkCommandBufferAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = RenderSystem::sTransferCommandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-
-    // Create temporary command buffer to copy the data.
-    VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(RenderSystem::sDevice, &allocInfo, &commandBuffer);
-
-    VkCommandBufferBeginInfo beginInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-    };
-
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VkCommandBuffer buffer = RenderSystem::BeginDataTransfer();
 
     // Copies over the data.
     VkBufferCopy copyRegion = {
@@ -68,19 +53,9 @@ void GPUBuffer::Copy(GPUBuffer& src, uint32_t size, uint32_t src_offset, uint32_
         .dstOffset = dst_offset,
         .size = size
     };
-    vkCmdCopyBuffer(commandBuffer, src.m_handler, m_handler, 1, &copyRegion);
+    vkCmdCopyBuffer(buffer, src.m_handler, m_handler, 1, &copyRegion);
 
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer
-    };
-    vkQueueSubmit(RenderSystem::sTransferQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(RenderSystem::sTransferQueue);
-
-    vkFreeCommandBuffers(RenderSystem::sDevice, RenderSystem::sTransferCommandPool, 1, &commandBuffer);
+    RenderSystem::EndDataTransfer(buffer);
 }
 
 void GPUBuffer::Delete() {

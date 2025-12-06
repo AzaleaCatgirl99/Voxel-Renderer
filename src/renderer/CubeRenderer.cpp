@@ -11,19 +11,19 @@
 const VertexFormat CubeRenderer::sVertexFormat = VertexFormat()
                             .Element(RENDER_TYPE_VEC3)
                             .Element(RENDER_TYPE_VEC4);
-GraphicsPipeline CubeRenderer::sPipeline = GraphicsPipeline("test_vert.spv", "test_frag.spv")
-                            .PolygonMode(RENDER_POLYGON_MODE_FILL)
-                            .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
-                            .CullMode(RENDER_CULL_MODE_BACK)
-                            .Vertex(sVertexFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST)
-                            .Uniform(0, RENDER_SHADER_STAGE_VERTEX, &sUBO);
+// GraphicsPipeline CubeRenderer::sPipeline = GraphicsPipeline("test_vert.spv", "test_frag.spv")
+//                             .PolygonMode(RENDER_POLYGON_MODE_FILL)
+//                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
+//                             .CullMode(RENDER_CULL_MODE_BACK)
+//                             .Vertex(sVertexFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST)
+//                             .Uniform(0, RENDER_SHADER_STAGE_VERTEX, &sUBO);
 VertexBuffer CubeRenderer::sVBO = VertexBuffer(24, sVertexFormat);
 IndexBuffer CubeRenderer::sIBO = IndexBuffer(36, RENDER_TYPE_UINT16_T);
 UniformBuffer CubeRenderer::sUBO = UniformBuffer(sUniformSize);
 
 void CubeRenderer::Initialize() {
     sUBO.Build();
-    sPipeline.Build();
+    // sPipeline.Build();
     sVBO.Build();
     sIBO.Build();
 
@@ -103,7 +103,7 @@ void CubeRenderer::Destroy() {
     sVBO.Delete();
     sIBO.Delete();
     sUBO.Delete();
-    sPipeline.Delete();
+    // sPipeline.Delete();
 }
 
 void CubeRenderer::Draw(const Settings& settings) {
@@ -115,15 +115,15 @@ void CubeRenderer::Draw(const Settings& settings) {
     model = glm::scale(model, settings.m_scale);
     model[1][1] *= -1;
 
-    CameraUBO uboData = {
+    ModelData data = {
         .m_model = model,
         .m_view = Camera::GetView(),
         .m_proj = Camera::GetProj()
     };
 
-    sUBO.Update(&uboData);
+    sUBO.Update(&data);
 
-    RenderSystem::BindPipeline(sPipeline);
+    // RenderSystem::BindPipeline(sPipeline);
     RenderSystem::BindVertexBuffer(sVBO);
     RenderSystem::BindIndexBuffer(sIBO);
 

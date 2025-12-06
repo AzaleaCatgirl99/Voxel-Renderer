@@ -5,14 +5,14 @@
 #include <SDL3/SDL_filesystem.h>
 #include <cstring>
 #include <optional>
-#include <set>
 #include <vulkan/vulkan_beta.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "util/display/device/GPUDevice.h"
+#include "util/display/device/RenderDevice.h"
 #include "util/display/pipeline/GraphicsPipeline.h"
 #include "util/display/vulkan/VkObjectMaps.h"
-#include "util/display/vulkan/VkUtil.h"
 #include "util/Constants.h"
 #include "util/display/Window.h"
 #include "util/display/vulkan/VkResultHandler.h"
@@ -22,13 +22,11 @@
 #include <backends/imgui_impl_vulkan.h>
 
 RenderSystem::Settings RenderSystem::sSettings;
+RenderDevice RenderSystem::sDevice = RenderDevice(sInstance, &sGPU);
+GPUDevice RenderSystem::sGPU = GPUDevice(sInstance, sSurface);
+
 VkInstance RenderSystem::sInstance = VK_NULL_HANDLE;
 VkDebugUtilsMessengerEXT RenderSystem::sDebugMessenger = VK_NULL_HANDLE;
-VkPhysicalDevice RenderSystem::sPhysicalDevice = VK_NULL_HANDLE;
-VkDevice RenderSystem::sDevice = VK_NULL_HANDLE;
-VkQueue RenderSystem::sGraphicsQueue = VK_NULL_HANDLE;
-VkQueue RenderSystem::sPresentationQueue = VK_NULL_HANDLE;
-VkQueue RenderSystem::sTransferQueue = VK_NULL_HANDLE;
 VkSurfaceKHR RenderSystem::sSurface = VK_NULL_HANDLE;
 VkSwapchainKHR RenderSystem::sSwapChain = VK_NULL_HANDLE;
 std::vector<VkImage> RenderSystem::sSwapChainImages;
@@ -37,10 +35,7 @@ VkExtent2D RenderSystem::sSwapChainExtent;
 std::vector<VkImageView> RenderSystem::sSwapChainImageViews;
 VkRenderPass RenderSystem::sRenderPass = VK_NULL_HANDLE;
 std::vector<VkFramebuffer> RenderSystem::sSwapChainFramebuffers;
-VkCommandPool RenderSystem::sCommandPool = VK_NULL_HANDLE;
-VkCommandPool RenderSystem::sTransferCommandPool = VK_NULL_HANDLE;
 uint32_t RenderSystem::sCurrentFrame = 0;
-RenderSystem::QueueFamilies RenderSystem::sQueueFamilies;
 
 VkCommandBuffer RenderSystem::sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
 VkSemaphore RenderSystem::sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
@@ -51,38 +46,8 @@ std::vector<VkSemaphore> RenderSystem::sRenderFinishedSemaphores;
 uint32_t RenderSystem::sImageIndex = 0;
 
 std::vector<const char*> RenderSystem::sInstanceExtensions;
-std::vector<const char*> RenderSystem::sDeviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-
-#ifdef SDL_PLATFORM_MACOS // macOS support.
-    ,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
-#endif
-};
-
-std::vector<const char*> RenderSystem::sLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
 
 Logger RenderSystem::sLogger = Logger("RenderSystem");
-VkApplicationInfo RenderSystem::sAppInfo = {
-    .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-    .pApplicationName = "Voxel Renderer",
-    .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-    .pEngineName = "Voxel Engine",
-    .engineVersion = VK_MAKE_VERSION(0, 1, 0),
-    .apiVersion = VK_API_VERSION_1_0
-};
-
-VkDebugUtilsMessengerCreateInfoEXT RenderSystem::sDebugMessengerInfo = {
-    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-    .messageSeverity = ENABLED_SEVERITY_FLAGS,
-    .messageType = 
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-    .pfnUserCallback = DebugCallback,
-    .pUserData = VK_NULL_HANDLE
-};
 
 std::deque<RenderSystem::Command> RenderSystem::sQueuedCommands;
 
@@ -92,14 +57,13 @@ void RenderSystem::Initialize(const Settings& settings) {
     CreateInstance();
     CreateDebugMessenger();
     CreateSurface();
-    SelectBestPhysicalDevice();
-    CreateLogicalDevice();
+    sGPU.Build();
+    sDevice.Build();
     CreateSwapChain();
     CreateImageViews();
     CreateRenderPass();
     CreateFramebuffers();
-    CreateCommandPool();
-    CreateCommandBuffer();
+    sDevice.CreateCmdBuffers(sCommandBuffers, MAX_FRAMES_IN_FLIGHT);
     CreateSyncObjects();
 }
 
@@ -112,9 +76,6 @@ void RenderSystem::Destroy() {
     for (size_t i = 0; i < sSwapChainImages.size(); i++)
         vkDestroySemaphore(sDevice, sRenderFinishedSemaphores[i], VK_NULL_HANDLE);
 
-    vkDestroyCommandPool(sDevice, sTransferCommandPool, VK_NULL_HANDLE);
-    vkDestroyCommandPool(sDevice, sCommandPool, VK_NULL_HANDLE);
-
     for (auto framebuffer : sSwapChainFramebuffers)
         vkDestroyFramebuffer(sDevice, framebuffer, VK_NULL_HANDLE);
 
@@ -125,10 +86,10 @@ void RenderSystem::Destroy() {
 
     vkDestroySwapchainKHR(sDevice, sSwapChain, VK_NULL_HANDLE);
 
-    vkDestroyDevice(sDevice, VK_NULL_HANDLE);
+    sDevice.Delete();
 
     if (ENABLE_VALIDATION_LAYERS)
-        DestroyDebugUtilsMessengerEXT(VK_NULL_HANDLE);
+        DestroyDebugUtilsMessengerEXT();
 
     SDL_Vulkan_DestroySurface(sInstance, sSurface, VK_NULL_HANDLE);
 
@@ -136,7 +97,7 @@ void RenderSystem::Destroy() {
 }
 
 void RenderSystem::RecreateSwapChain() {
-    if (Window::sMinimized)
+    if (Window::IsMinimized())
         return;
 
     vkDeviceWaitIdle(sDevice);
@@ -203,7 +164,7 @@ void RenderSystem::UpdateDisplay() {
         .pSignalSemaphores = &sRenderFinishedSemaphores[sImageIndex]
     };
 
-    VkResult result = vkQueueSubmit(sGraphicsQueue, 1, &submitInfo, sInFlightFences[sCurrentFrame]);
+    VkResult result = vkQueueSubmit(sDevice.GetGraphicsQueue(), 1, &submitInfo, sInFlightFences[sCurrentFrame]);
     VkResultHandler::CheckResult(result, "Failed to submit command buffer!");
 
     VkPresentInfoKHR presentInfo = {
@@ -216,7 +177,7 @@ void RenderSystem::UpdateDisplay() {
         .pResults = VK_NULL_HANDLE
     };
 
-    vkQueuePresentKHR(sPresentationQueue, &presentInfo);
+    vkQueuePresentKHR(sDevice.GetPresentQueue(), &presentInfo);
 
     // Advance to the next frame.
     sCurrentFrame = (sCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -228,11 +189,20 @@ void RenderSystem::CreateInstance() {
     if (ENABLE_VALIDATION_LAYERS && !CheckValidationLayerSupport())
         throw sLogger.RuntimeError("Not all of the requested validation layers are available!");
 
-    std::optional<VkDebugUtilsMessengerCreateInfoEXT> debugMessenger;
-    if (ENABLE_VALIDATION_LAYERS)
-        debugMessenger = sDebugMessengerInfo;
+    VkInstanceCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pNext = ENABLE_VALIDATION_LAYERS ? &DEBUG_MESSENGER_INFO : VK_NULL_HANDLE,
+#ifdef SDL_PLATFORM_APPLE
+            .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR, // Apple devices support flag.
+#endif
+            .pApplicationInfo = &APP_INFO,
+            .enabledLayerCount = LAYER_COUNT,
+            .ppEnabledLayerNames = LAYERS,
+            .enabledExtensionCount = static_cast<uint32_t>(sInstanceExtensions.size()),
+            .ppEnabledExtensionNames = sInstanceExtensions.data(),
+        };
 
-    VkResult result = VkUtil::CreateInstance(&sInstance, sInstanceExtensions, sLayers, sAppInfo, debugMessenger);
+    VkResult result = vkCreateInstance(&info, VK_NULL_HANDLE, &sInstance);
     VkResultHandler::CheckResult(result, "Failed to create Vulkan instance!", "Created Vulkan instance.");
 }
 
@@ -247,8 +217,8 @@ void RenderSystem::SetupRequiredExtensions() {
     // Convert to vector so we can add more extensions.
     sInstanceExtensions = std::vector<const char*>(sdlExtensions, sdlExtensions + sdlExtensionCount);
 
-    // Add support for macOS.
-    #ifdef SDL_PLATFORM_MACOS
+    // Add support for Apple devices.
+    #ifdef SDL_PLATFORM_APPLE
     sInstanceExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     sInstanceExtensions.emplace_back("VK_KHR_get_physical_device_properties2");
     #endif
@@ -268,7 +238,7 @@ bool RenderSystem::CheckValidationLayerSupport() {
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
     // Check if the wanted validation layers are available.
-    for (const char* layerName : sLayers) {
+    for (const char* layerName : LAYERS) {
         bool layerFound = false;
 
         for (const auto& layerProperties : availableLayers) {
@@ -333,7 +303,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderSystem::DebugCallback(
 void RenderSystem::CreateDebugMessenger() {
     if (!ENABLE_VALIDATION_LAYERS) return;
 
-    VkResult result = CreateDebugUtilsMessengerEXT(&sDebugMessengerInfo, VK_NULL_HANDLE, &sDebugMessenger);
+    VkResult result = CreateDebugUtilsMessengerEXT(&DEBUG_MESSENGER_INFO, VK_NULL_HANDLE, &sDebugMessenger);
     VkResultHandler::CheckResult(result, "Failed to create debug messenger!", "Created debug messenger.");
 }
 
@@ -351,229 +321,6 @@ VkResult RenderSystem::CreateDebugUtilsMessengerEXT(
         return func(sInstance, create_info, allocator, debug_messenger); // Run normally.
 
     return VK_ERROR_EXTENSION_NOT_PRESENT; // Return error, extension not found.
-}
-
-void RenderSystem::DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* allocator) {
-    // Loads the function with instance proc.
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
-        vkGetInstanceProcAddr(sInstance, "vkDestroyDebugUtilsMessengerEXT");
-
-    // Failed to load if it returns nullptr.
-    if (func)
-        func(sInstance, sDebugMessenger, allocator); // Run normally.
-    else
-        sLogger.Error("Failed to destroy debug messenger! Unable to load vkDestroyDebugUtilsMessengerEXT.");
-}
-
-void RenderSystem::SelectBestPhysicalDevice() {
-    // Gets the amount of GPUs on the system that support Vulkan.
-    uint32_t count = 0;
-    vkEnumeratePhysicalDevices(sInstance, &count, VK_NULL_HANDLE);
-
-    // Throws a runtime error if no GPUs with Vulkan support exist.
-    if (count == 0)
-        throw sLogger.RuntimeError("Failed to find a GPU with Vulkan support!");
-
-    VkPhysicalDevice devices[count];
-    vkEnumeratePhysicalDevices(sInstance, &count, devices);
-
-    size_t currentBestScore = 0;
-    size_t currentBestDeviceIndex = 0;
-    // Goes through each device and checks whether it is the best one to use.
-    for (size_t i = 0; i < count; i++) {
-        size_t score = GetPhysicalDeviceScore(devices[i]);
-        if (IsPhysicalDeviceUsable(devices[i]) && score > currentBestScore) {
-            currentBestScore = score;
-            currentBestDeviceIndex = i;
-        }
-    }
-
-    // Set the physical best physical device.
-    sPhysicalDevice = devices[currentBestDeviceIndex];
-
-    // Find its name and log it.
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(sPhysicalDevice, &properties);
-    sLogger.Info("Using physical device '", properties.deviceName, "'.");
-}
-
-bool RenderSystem::IsPhysicalDeviceUsable(VkPhysicalDevice device) {
-    QueueFamilies indices = GetQueueFamilies(device);
-
-    // Ensure all queue families are supported.
-    if (!indices.HasEverything())
-        return false;
-    
-    // Ensure all required device extensions are supported.
-    if (!CheckDeviceExtensionSupport(device))
-        return false;
-
-    // Ensure required swap chain functionality.
-    SwapChainSupportDetails swapChainSupport = GetSwapChainSupport(device);
-    if (swapChainSupport.m_formats.empty() || swapChainSupport.m_presentModes.empty())
-        return false;
-    
-    return true; // Device is Usable.
-}
-
-size_t RenderSystem::GetPhysicalDeviceScore(VkPhysicalDevice device) {
-    size_t score = 0;
-
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(device, &properties);
-
-    VkPhysicalDeviceFeatures features;
-    vkGetPhysicalDeviceFeatures(device, &features);
-
-    // If the GPU is discrete, the score will be added by 1000.
-    if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-        score += 1000;
-
-    // Score is mostly determined by the maximum 2D image dimensions.
-    score += properties.limits.maxImageDimension2D;
-
-    return score;
-}
-
-RenderSystem::QueueFamilies RenderSystem::GetQueueFamilies(VkPhysicalDevice device) {
-    QueueFamilies indices;
-
-    // Gets the amount of queue families on the device.
-    uint32_t count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, VK_NULL_HANDLE);
-
-    // Gets the queue families on the device.
-    VkQueueFamilyProperties families[count];
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, families);
-
-    // Goes through all of the flags and finds the indices for them.
-    for (uint32_t i = 0; i < count; i++) {
-        if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            indices.m_graphics = i;
-
-        if (SDL_Vulkan_GetPresentationSupport(sInstance, device, i))
-            indices.m_presentation = i;
-
-#ifdef SDL_PLATFORM_APPLE
-        if (families[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
-            indices.m_transfer = i;
-#else
-        if ((families[i].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
-            indices.m_transfer = i;
-#endif
-
-        // Breaks if everything has already been added to the indices.
-        if (indices.HasEverything())
-            break;
-    }
-
-    return indices;
-}
-
-void RenderSystem::CreateLogicalDevice() {
-    sQueueFamilies = GetQueueFamilies(sPhysicalDevice);
-
-    if (!sQueueFamilies.m_graphics.has_value())
-        throw sLogger.RuntimeError("Failed to create logical device! No graphics family found.");
-
-    if (!sQueueFamilies.m_presentation.has_value())
-        throw sLogger.RuntimeError("Failed to create logical device! No presentation family found.");
-
-    if (!sQueueFamilies.m_transfer.has_value())
-        throw sLogger.RuntimeError("Failed to create logical device! No transfer family found.");
-
-    // Gets the unique queue families that exist.
-    std::set<uint32_t> uniqueQueueFamilies = {sQueueFamilies.m_graphics.value(), sQueueFamilies.m_presentation.value(), sQueueFamilies.m_transfer.value()};
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    float queuePriority = 1.0f;
-
-    for (uint32_t queueFamily : uniqueQueueFamilies) {
-        queueCreateInfos.emplace_back(VkDeviceQueueCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = queueFamily,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority
-        });
-    }
-
-    VkPhysicalDeviceFeatures features;
-    vkGetPhysicalDeviceFeatures(sPhysicalDevice, &features);
-#ifdef SDL_PLATFORM_MACOS
-    // Disables robust buffer access if the platform is macOS.
-    features.robustBufferAccess = VK_FALSE;
-#endif
-
-    VkDeviceCreateInfo createInfo = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
-        .pQueueCreateInfos = queueCreateInfos.data(), // Links the queues.
-        .enabledExtensionCount = static_cast<uint32_t>(sDeviceExtensions.size()),
-        .ppEnabledExtensionNames = sDeviceExtensions.data(),
-        .pEnabledFeatures = &features // Links the device features.
-    };
-
-    if (ENABLE_VALIDATION_LAYERS) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(sLayers.size());
-        createInfo.ppEnabledLayerNames = sLayers.data();
-    } else {
-        createInfo.enabledLayerCount = 0;
-    }
-
-    VkResult result = vkCreateDevice(sPhysicalDevice, &createInfo, VK_NULL_HANDLE, &sDevice);
-    VkResultHandler::CheckResult(result, "Failed to create logical device!", "Created logical device.");
-
-    vkGetDeviceQueue(sDevice, sQueueFamilies.m_graphics.value(), 0, &sGraphicsQueue);
-    vkGetDeviceQueue(sDevice, sQueueFamilies.m_presentation.value(), uniqueQueueFamilies.size() < 2 ? 0 : 1, &sPresentationQueue);
-
-    uint32_t transferIndex = uniqueQueueFamilies.size() < 2 ? 0 : uniqueQueueFamilies.size() < 3 ? 1 : uniqueQueueFamilies.size() - 1;
-    vkGetDeviceQueue(sDevice, sQueueFamilies.m_transfer.value(), transferIndex, &sTransferQueue);
-}
-
-void RenderSystem::CreateSurface() {
-    if (!SDL_Vulkan_CreateSurface(Window::sContext, sInstance, VK_NULL_HANDLE, &sSurface))
-        throw sLogger.RuntimeError("Failed to create surface!", SDL_GetError());
-    sLogger.Info("Created surface.");
-}
-
-bool RenderSystem::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
-    // Get extension information. Find number of extensions first for allocating the extension vector.
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, VK_NULL_HANDLE, &extensionCount, VK_NULL_HANDLE);
-
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(device, VK_NULL_HANDLE, &extensionCount, availableExtensions.data());
-
-    // Ensure all required device extensions are supported.
-    std::set<std::string> requiredExtensions(sDeviceExtensions.begin(), sDeviceExtensions.end());
-
-    for (const auto& extension : availableExtensions)
-        requiredExtensions.erase(extension.extensionName);
-
-    return requiredExtensions.empty();
-}
-
-RenderSystem::SwapChainSupportDetails RenderSystem::GetSwapChainSupport(VkPhysicalDevice device) {
-    SwapChainSupportDetails details;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, sSurface, &details.m_capabilities);
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, sSurface, &formatCount, VK_NULL_HANDLE);
-
-    if (formatCount != 0) {
-        details.m_formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, sSurface, &formatCount, details.m_formats.data());
-    }
-
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, sSurface, &presentModeCount, VK_NULL_HANDLE);
-    
-    if (presentModeCount != 0) {
-        details.m_presentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, sSurface, &presentModeCount, details.m_presentModes.data());
-    }
-
-    return details;
 }
 
 VkSurfaceFormatKHR RenderSystem::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
@@ -614,7 +361,7 @@ VkExtent2D RenderSystem::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabi
 }
 
 void RenderSystem::CreateSwapChain() {
-    SwapChainSupportDetails swapChainSupport = GetSwapChainSupport(sPhysicalDevice);
+    auto swapChainSupport = sGPU.GetSwapChainSupport();
 
     VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.m_formats);
     VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.m_presentModes);
@@ -645,9 +392,9 @@ void RenderSystem::CreateSwapChain() {
     };
 
     // Handle the cases for whether the queue families are the same.
-    uint32_t queueFamilyIndices[] = {sQueueFamilies.m_graphics.value(), sQueueFamilies.m_presentation.value()};
+    uint32_t queueFamilyIndices[] = {sGPU.GetQueueFamilies().m_graphics.value(), sGPU.GetQueueFamilies().m_present.value()};
 
-    if (sQueueFamilies.m_graphics != sQueueFamilies.m_presentation) {
+    if (sGPU.GetQueueFamilies().m_graphics != sGPU.GetQueueFamilies().m_present) {
         swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         swapChainCreateInfo.queueFamilyIndexCount = 2;
         swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -764,38 +511,6 @@ void RenderSystem::CreateFramebuffers() {
     }
 }
 
-void RenderSystem::CreateCommandPool() {
-    VkCommandPoolCreateInfo poolInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = sQueueFamilies.m_graphics.value()
-    };
-
-    VkResult result = vkCreateCommandPool(sDevice, &poolInfo, VK_NULL_HANDLE, &sCommandPool);
-    VkResultHandler::CheckResult(result, "Failed to create command pool!", "Created command pool.");
-
-    VkCommandPoolCreateInfo transferPoolInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        .queueFamilyIndex = sQueueFamilies.m_transfer.value()
-    };
-
-    result = vkCreateCommandPool(sDevice, &transferPoolInfo, VK_NULL_HANDLE, &sTransferCommandPool);
-    VkResultHandler::CheckResult(result, "Failed to create transfer command pool!", "Created transfer command pool.");
-}
-
-void RenderSystem::CreateCommandBuffer() {
-    VkCommandBufferAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = sCommandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = MAX_FRAMES_IN_FLIGHT
-    };
-
-    VkResult result = vkAllocateCommandBuffers(sDevice, &allocInfo, &sCommandBuffers[sCurrentFrame]);
-    VkResultHandler::CheckResult(result, "Failed to create command buffer!", "Created command buffer.");
-}
-
 void RenderSystem::CreateSyncObjects() {
     sRenderFinishedSemaphores.resize(sSwapChainImages.size());
 
@@ -875,15 +590,4 @@ void RenderSystem::EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
     VkResult result = vkEndCommandBuffer(commandBuffer);
     VkResultHandler::CheckResult(result, "Failed to record command buffer!");
-}
-
-uint32_t RenderSystem::FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties memoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(sPhysicalDevice, &memoryProperties);
-
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
-        if (filter & (1 << i) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            return i;
-
-    throw sLogger.RuntimeError("Failed to find suitable memory type!");
 }

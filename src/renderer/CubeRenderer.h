@@ -22,7 +22,7 @@ public:
     static void Destroy();
     static void Draw(const Settings& settings);
 private:
-    struct CameraUBO {
+    struct ModelData {
         glm::mat4 m_model;
         glm::mat4 m_view;
         glm::mat4 m_proj;
@@ -30,7 +30,7 @@ private:
 
     static const VertexFormat sVertexFormat;
     static constexpr const uint32_t sUniformSize = Std140Calc().PutMat4().PutMat4().PutMat4().Get();
-    static GraphicsPipeline sPipeline;
+    // static GraphicsPipeline sPipeline;
     static VertexBuffer sVBO;
     static IndexBuffer sIBO;
     static UniformBuffer sUBO;

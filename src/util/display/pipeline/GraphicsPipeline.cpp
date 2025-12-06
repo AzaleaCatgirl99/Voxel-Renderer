@@ -5,32 +5,13 @@
 #include "util/display/vulkan/VkResultHandler.h"
 #include "util/display/vulkan/VkObjectMaps.h"
 #include <SDL3/SDL_filesystem.h>
+#include <cstddef>
+#include <cstdint>
 #include "util/display/buffer/UniformBuffer.h"
 
 void GraphicsPipeline::Build() {
-    std::string basePath = SDL_GetBasePath();
-    BufferedFile vertShader = BufferedFile::Read(basePath + "assets/shaders/" + m_vertex, true);
-    BufferedFile fragShader = BufferedFile::Read(basePath + "assets/shaders/" + m_fragment, true);
-
-    VkShaderModuleCreateInfo vertShaderCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = vertShader.Size(),
-        .pCode = vertShader.DataAsUInt32()
-    };
-
-    VkShaderModule vertShaderModule;
-    VkResult result = vkCreateShaderModule(RenderSystem::sDevice, &vertShaderCreateInfo, VK_NULL_HANDLE, &vertShaderModule);
-    VkResultHandler::CheckResult(result, "Failed to create vertex shader module!");
-
-    VkShaderModuleCreateInfo fragShaderCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = fragShader.Size(),
-        .pCode = fragShader.DataAsUInt32()
-    };
-
-    VkShaderModule fragShaderModule;
-    result = vkCreateShaderModule(RenderSystem::sDevice, &fragShaderCreateInfo, VK_NULL_HANDLE, &fragShaderModule);
-    VkResultHandler::CheckResult(result, "Failed to create fragment shader module!");
+    VkShaderModule vertShaderModule = CreateShader(m_info.vertexShaderPath.c_str());
+    VkShaderModule fragShaderModule = CreateShader(m_info.fragmentShaderPath.c_str());
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -48,52 +29,43 @@ void GraphicsPipeline::Build() {
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
-    std::vector<VkDynamicState> dynamicStates;
-
-    if (!m_viewport.has_value())
-        dynamicStates.emplace_back(VK_DYNAMIC_STATE_VIEWPORT);
-
-    if (!m_scissor.has_value())
-        dynamicStates.emplace_back(VK_DYNAMIC_STATE_SCISSOR);
-
     VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-        .pDynamicStates = dynamicStates.data()
+        .dynamicStateCount = m_info.dynamicStateCount,
+        .pDynamicStates = m_info.dynamicStates
     };
 
     // Checks whether the pipeline has a vertex format. If it does, then it'll setup the binding and attribute descriptions.
-    bool useVertex = m_vertexFormat.has_value();
     VkVertexInputBindingDescription vertexBindingDesc;
     std::vector<VkVertexInputAttributeDescription> vertexAttribDescs;
-    if (useVertex) {
+    if (m_info.useVertexFormat) {
         vertexBindingDesc = {
             .binding = 0,
-            .stride = static_cast<uint32_t>(m_vertexFormat->m_stride),
+            .stride = static_cast<uint32_t>(m_info.vertexFormat->m_stride),
             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX // TODO this needs to change to setup instance rendering.
         };
 
         uint32_t offset = 0;
-        for (uint32_t i = 0; i < m_vertexFormat->m_elementsSize; i++) {
+        for (uint32_t i = 0; i < m_info.vertexFormat->m_elementsSize; i++) {
             VkVertexInputAttributeDescription desc = {
                 .location = i,
                 .binding = 0,
-                .format = VkObjectMaps::GetTypeFormat(m_vertexFormat->m_elements[i].m_type),
+                .format = VkObjectMaps::GetTypeFormat(m_info.vertexFormat->m_elements[i].m_type),
                 .offset = offset
             };
 
             vertexAttribDescs.push_back(desc);
 
-            offset += GetRenderTypeSize(m_vertexFormat->m_elements[i].m_type);
+            offset += GetRenderTypeSize(m_info.vertexFormat->m_elements[i].m_type);
         }
     }
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = useVertex ? 1u : 0u,
-        .pVertexBindingDescriptions = useVertex ? &vertexBindingDesc : VK_NULL_HANDLE,
-        .vertexAttributeDescriptionCount = useVertex ? static_cast<uint32_t>(vertexAttribDescs.size()) : 0u,
-        .pVertexAttributeDescriptions = useVertex ? vertexAttribDescs.data() : VK_NULL_HANDLE,
+        .vertexBindingDescriptionCount = m_info.useVertexFormat ? 1u : 0u,
+        .pVertexBindingDescriptions = m_info.useVertexFormat ? &vertexBindingDesc : VK_NULL_HANDLE,
+        .vertexAttributeDescriptionCount = m_info.useVertexFormat ? static_cast<uint32_t>(vertexAttribDescs.size()) : 0u,
+        .pVertexAttributeDescriptions = m_info.useVertexFormat ? vertexAttribDescs.data() : VK_NULL_HANDLE,
     };
 
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
@@ -102,44 +74,12 @@ void GraphicsPipeline::Build() {
         .primitiveRestartEnable = VK_FALSE
     };
 
-    VkViewport viewport;
-    if (m_viewport.has_value())
-        viewport = {
-            .x = m_viewport->x,
-            .y = m_viewport->y,
-            .width = m_viewport->width,
-            .height = m_viewport->height,
-            .minDepth = m_viewport->minDepth,
-            .maxDepth = m_viewport->maxDepth
-        };
-
-    VkRect2D scissor;
-    if (m_scissor.has_value())
-        scissor = {
-            .offset = {m_scissor->x, m_scissor->y},
-            .extent = {m_scissor->width, m_scissor->height}
-        };
-
     VkPipelineViewportStateCreateInfo viewportStateInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1, // Only need 1 viewport and scissor.
-        .pViewports = m_viewport.has_value() ? &viewport : VK_NULL_HANDLE,
+        .pViewports = &m_info.viewport,
         .scissorCount = 1,
-        .pScissors = m_scissor.has_value() ? &scissor : VK_NULL_HANDLE
-    };
-
-    VkPipelineRasterizationStateCreateInfo rasterizerInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .depthClampEnable = VK_FALSE, // Discard off-screen fragments, do not clamp.
-        .rasterizerDiscardEnable = VK_FALSE,
-        .polygonMode = m_polygonMode.has_value() ? VkObjectMaps::GetPolygonMode(m_polygonMode.value()) : VK_POLYGON_MODE_FILL,
-        .cullMode = m_cullMode.has_value() ? VkObjectMaps::GetCullMode(m_cullMode.value()) : VK_CULL_MODE_BACK_BIT,
-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
-        .depthBiasEnable = VK_FALSE,
-        .depthBiasConstantFactor = 0.0f,
-        .depthBiasClamp = 0.0f,
-        .depthBiasSlopeFactor = 0.0f,
-        .lineWidth = 1.0f
+        .pScissors = &m_info.scissor
     };
 
     VkPipelineMultisampleStateCreateInfo multisamplingInfo = {
@@ -152,21 +92,7 @@ void GraphicsPipeline::Build() {
         .alphaToOneEnable = VK_FALSE,
     };
 
-    VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo = {
-        .blendEnable = m_blendFunc.has_value() ? VK_TRUE : VK_FALSE,
-        .srcColorBlendFactor = m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(m_blendFunc->at(0)) : VK_BLEND_FACTOR_ONE, // Optional.
-        .dstColorBlendFactor = m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(m_blendFunc->at(1)) : VK_BLEND_FACTOR_ZERO, // Optional.
-        .colorBlendOp = VK_BLEND_OP_ADD, // Optional.
-        .srcAlphaBlendFactor = m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(m_blendFunc->at(2)) : VK_BLEND_FACTOR_ONE, // Optional.
-        .dstAlphaBlendFactor = m_blendFunc.has_value() ? VkObjectMaps::GetBlendFactor(m_blendFunc->at(3)) : VK_BLEND_FACTOR_ZERO, // Optional.
-        .alphaBlendOp = VK_BLEND_OP_ADD, // Optional.
-        .colorWriteMask = 
-            VK_COLOR_COMPONENT_R_BIT |
-            VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT |
-            VK_COLOR_COMPONENT_A_BIT
-    };
-
+    auto colorBlendAttachmentInfo = CreateColorInfo();
     VkPipelineColorBlendStateCreateInfo colorBlendingInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .logicOpEnable = VK_FALSE,
@@ -179,11 +105,24 @@ void GraphicsPipeline::Build() {
     colorBlendingInfo.blendConstants[2] = 0.0f;
     colorBlendingInfo.blendConstants[3] = 0.0f;
 
-    if (m_layoutBinding.has_value()) {
+    VkResult result;
+    if (m_info.descriptorCount > 0) {
+        VkDescriptorSetLayoutBinding bindings[m_info.descriptorCount];
+
+        for (uint32_t i = 0; i < m_info.descriptorCount; i++) {
+            bindings[i] = {
+                .binding = m_info.descriptors[i].binding,
+                .descriptorType = m_info.descriptors[i].type,
+                .descriptorCount = 1,
+                .stageFlags = m_info.descriptors[i].stage,
+                .pImmutableSamplers = VK_NULL_HANDLE
+            };
+        }
+
         VkDescriptorSetLayoutCreateInfo layoutInfo = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .bindingCount = 1,
-            .pBindings = &m_layoutBinding.value()
+            .bindingCount = m_info.descriptorCount,
+            .pBindings = bindings
         };
 
         result = vkCreateDescriptorSetLayout(RenderSystem::sDevice, &layoutInfo, VK_NULL_HANDLE, &m_descriptorSetLayout);
@@ -191,14 +130,16 @@ void GraphicsPipeline::Build() {
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = m_layoutBinding.has_value() ? 1u : 0u,
-        .pSetLayouts = m_layoutBinding.has_value() ? &m_descriptorSetLayout : VK_NULL_HANDLE,
+        .setLayoutCount = m_info.descriptorCount > 0 ? 1u : 0u,
+        .pSetLayouts = m_info.descriptorCount > 0 ? &m_descriptorSetLayout : VK_NULL_HANDLE,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = VK_NULL_HANDLE
     };
 
     result = vkCreatePipelineLayout(RenderSystem::sDevice, &pipelineLayoutInfo, VK_NULL_HANDLE, &m_layout);
     VkResultHandler::CheckResult(result, "Failed to create pipeline layout!");
+
+    auto rasterizerInfo = CreateRasterizationInfo();
 
     VkGraphicsPipelineCreateInfo pipelineInfo = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -225,17 +166,21 @@ void GraphicsPipeline::Build() {
     vkDestroyShaderModule(RenderSystem::sDevice, fragShaderModule, VK_NULL_HANDLE);
     vkDestroyShaderModule(RenderSystem::sDevice, vertShaderModule, VK_NULL_HANDLE);
 
-    if (m_layoutBinding.has_value()) {
-        VkDescriptorPoolSize poolSize = {
-            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = RenderSystem::MAX_FRAMES_IN_FLIGHT
-        };
+    if (m_info.descriptorCount > 0) {
+        VkDescriptorPoolSize sizes[m_info.descriptorCount];
+
+        for (uint32_t i = 0; i < m_info.descriptorCount; i++) {
+            sizes[i] = {
+                .type = m_info.descriptors[i].type,
+                .descriptorCount = static_cast<uint32_t>(RenderSystem::MAX_FRAMES_IN_FLIGHT)
+            };
+        }
 
         VkDescriptorPoolCreateInfo poolInfo = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .maxSets = RenderSystem::MAX_FRAMES_IN_FLIGHT,
-            .poolSizeCount = 1,
-            .pPoolSizes = &poolSize
+            .poolSizeCount = m_info.descriptorCount,
+            .pPoolSizes = sizes
         };
 
         VkResult result = vkCreateDescriptorPool(RenderSystem::sDevice, &poolInfo, VK_NULL_HANDLE, &m_descriptorPool);
@@ -249,46 +194,72 @@ void GraphicsPipeline::Build() {
             .pSetLayouts = layouts
         };
 
-        result = vkAllocateDescriptorSets(RenderSystem::sDevice, &allocInfo, m_descriptorSets);
-        VkResultHandler::CheckResult(result, "Failed to allocate descriptor sets!");
+        // for (uint32_t i = 0; i < m_info.descriptorCount; i++) {
+        //     m_descriptorSets.try_emplace(m_info.descriptors[i].binding);
 
-        VkBuffer gpuBuffers[RenderSystem::MAX_FRAMES_IN_FLIGHT] = {m_ubo->m_buffers[0].m_handler, m_ubo->m_buffers[1].m_handler};
-        for (size_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
-            VkDescriptorBufferInfo bufferInfo = {
-                .buffer = gpuBuffers[i],
-                .offset = 0,
-                .range = VK_WHOLE_SIZE
-            };
-
-            VkWriteDescriptorSet descriptorWrite = {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = m_descriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .pImageInfo = VK_NULL_HANDLE,
-                .pBufferInfo = &bufferInfo,
-                .pTexelBufferView = VK_NULL_HANDLE
-            };
-
-            vkUpdateDescriptorSets(RenderSystem::sDevice, 1, &descriptorWrite, 0, VK_NULL_HANDLE);
-        }
+        //     result = vkAllocateDescriptorSets(RenderSystem::sDevice, &allocInfo, m_descriptorSets[m_info.descriptors[i].binding].data());
+        //     VkResultHandler::CheckResult(result, "Failed to allocate descriptor sets!");
+        // }
     }
 }
 
+void GraphicsPipeline::UpdateUniformDescSet(uint32_t binding, UniformBuffer& buffer) {
+    if (m_info.descriptorCount == 0)
+        return;
+
+    VkBuffer gpuBuffers[RenderSystem::MAX_FRAMES_IN_FLIGHT] = {buffer.m_buffers[0].m_handler, buffer.m_buffers[1].m_handler};
+
+    for (size_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorBufferInfo bufferInfo = {
+            .buffer = gpuBuffers[i],
+            .offset = 0,
+            .range = VK_WHOLE_SIZE
+        };
+
+        VkWriteDescriptorSet descriptorWrite = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descriptorSets[binding][i],
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pImageInfo = VK_NULL_HANDLE,
+            .pBufferInfo = &bufferInfo,
+            .pTexelBufferView = VK_NULL_HANDLE
+        };
+
+        vkUpdateDescriptorSets(RenderSystem::sDevice, 1, &descriptorWrite, 0, VK_NULL_HANDLE);
+    }
+}
+
+VkShaderModule GraphicsPipeline::CreateShader(const char* path) {
+    BufferedFile file = BufferedFile::Read(path, true);
+
+    VkShaderModuleCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = file.Size(),
+        .pCode = file.DataAsUInt32()
+    };
+
+    VkShaderModule module;
+    VkResult result = vkCreateShaderModule(RenderSystem::sDevice, &info, VK_NULL_HANDLE, &module);
+    VkResultHandler::CheckResult(result, "Failed to create shader module!");
+
+    return module;
+}
+
 void GraphicsPipeline::CmdBind() {
-    if (m_layoutBinding.has_value())
-        vkCmdBindDescriptorSets(RenderSystem::sCommandBuffers[RenderSystem::sCurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &m_descriptorSets[RenderSystem::sCurrentFrame], 0, VK_NULL_HANDLE);
+    // if (m_info.descriptorCount == 0)
+    //     vkCmdBindDescriptorSets(RenderSystem::sCommandBuffers[RenderSystem::sCurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &m_descriptorSets[RenderSystem::sCurrentFrame], 0, VK_NULL_HANDLE);
 
     vkCmdBindPipeline(RenderSystem::sCommandBuffers[RenderSystem::sCurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_handler);
 }
 
 void GraphicsPipeline::Delete() {
-    if (m_layoutBinding.has_value()) {
-        vkDestroyDescriptorPool(RenderSystem::sDevice, m_descriptorPool, VK_NULL_HANDLE);
-        vkDestroyDescriptorSetLayout(RenderSystem::sDevice, m_descriptorSetLayout, VK_NULL_HANDLE);
-    }
+    // if (m_layoutBindingsCount > 0) {
+    //     vkDestroyDescriptorPool(RenderSystem::sDevice, m_descriptorPool, VK_NULL_HANDLE);
+    //     vkDestroyDescriptorSetLayout(RenderSystem::sDevice, m_descriptorSetLayout, VK_NULL_HANDLE);
+    // }
 
     vkDestroyPipeline(RenderSystem::sDevice, m_handler, VK_NULL_HANDLE);
     vkDestroyPipelineLayout(RenderSystem::sDevice, m_layout, VK_NULL_HANDLE);

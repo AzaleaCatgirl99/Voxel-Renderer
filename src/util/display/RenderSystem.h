@@ -4,20 +4,51 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
-#include <optional>
 #include <vulkan/vulkan.h>
 #include "util/Constants.h"
 #include "util/Features.h"
 #include "util/Logger.h"
+#include "util/display/Window.h"
+#include "util/display/device/GPUDevice.h"
+#include "util/display/device/RenderDevice.h"
 #include <vector>
 
 class VertexBuffer;
 class IndexBuffer;
+class UniformBuffer;
 class GraphicsPipeline;
 
 // Renderer implementation that uses Vulkan.
+// TODO add anisotropic filtering check
 class RenderSystem final {
 public:
+    static constexpr const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+    #ifdef VXL_DEBUG
+        static constexpr const bool ENABLE_VALIDATION_LAYERS = true;
+#else
+        static constexpr const bool ENABLE_VALIDATION_LAYERS = false;
+#endif
+    static constexpr const uint32_t ENABLED_SEVERITY_FLAGS =
+#if VXL_RENDERER_VERBOSE_LOG == VXL_TRUE
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+#endif
+#if VXL_RENDERER_INFO_LOG == VXL_TRUE
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+#endif
+#if VXL_RENDERER_WARNING_LOG == VXL_TRUE
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+#endif
+#if VXL_RENDERER_ERROR_LOG == VXL_TRUE
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+#endif
+    0;
+
+    static constexpr uint32_t LAYER_COUNT = 1;
+    static constexpr const char* LAYERS[LAYER_COUNT] = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
     struct Settings {
         eRenderSwapInterval m_swapInterval;
     };
@@ -26,6 +57,42 @@ public:
     static void Destroy();
     static void RecreateSwapChain();
     static void UpdateDisplay();
+
+    static constexpr VkCommandBuffer BeginDataTransfer() {
+        VkCommandBuffer buffer = sDevice.CreateCmdBuffer(sDevice.GetTransferCmdPool());
+
+        VkCommandBufferBeginInfo info = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+        };
+
+        vkBeginCommandBuffer(buffer, &info);
+
+        return buffer;
+    }
+
+    static constexpr void EndDataTransfer(VkCommandBuffer buffer) {
+        vkEndCommandBuffer(buffer);
+
+        VkSubmitInfo info = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &buffer
+        };
+
+        vkQueueSubmit(sDevice.GetTransferQueue(), 1, &info, VK_NULL_HANDLE);
+        vkQueueWaitIdle(sDevice.GetTransferQueue());
+
+        sDevice.FreeCmdBuffer(buffer, sDevice.GetTransferCmdPool());
+    }
+
+    static constexpr RenderDevice* GetDevice() noexcept {
+        return &sDevice;
+    }
+
+    static constexpr GPUDevice* GetGPU() noexcept {
+        return &sGPU;
+    }
 
     static constexpr void BindPipeline(GraphicsPipeline& pipeline) {
         sQueuedCommands.push_back({
@@ -78,23 +145,36 @@ public:
 private:
     friend class GraphicsPipeline;
     friend class GPUBuffer;
-    friend class ImGUIHelper;
     friend class UniformBuffer;
+    friend class GPUImage;
+    friend class GPUImageView;
+    friend class GPUImageSampler;
 
-    struct QueueFamilies {
-        std::optional<uint32_t> m_graphics;
-        std::optional<uint32_t> m_presentation;
-        std::optional<uint32_t> m_transfer;
+    // Annoyingly this needs to be placed here for it to be used in 'DEBUG_MESSENGER_INFO'.
+    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
+        VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+        VkDebugUtilsMessageTypeFlagsEXT message_type,
+        const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+        void* user_data);
 
-        constexpr bool HasEverything() const noexcept {
-            return m_graphics.has_value() && m_presentation.has_value() && m_transfer.has_value();
-        }
+    static constexpr const VkApplicationInfo APP_INFO = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = "Voxel Renderer",
+        .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
+        .pEngineName = "Voxel Engine",
+        .engineVersion = VK_MAKE_VERSION(0, 1, 0),
+        .apiVersion = VK_API_VERSION_1_0
     };
 
-    struct SwapChainSupportDetails {
-        VkSurfaceCapabilitiesKHR m_capabilities;
-        std::vector<VkSurfaceFormatKHR> m_formats;
-        std::vector<VkPresentModeKHR> m_presentModes;
+    static constexpr const VkDebugUtilsMessengerCreateInfoEXT DEBUG_MESSENGER_INFO = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = ENABLED_SEVERITY_FLAGS,
+        .messageType = 
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = DebugCallback,
+        .pUserData = VK_NULL_HANDLE
     };
 
     struct DrawData {
@@ -118,35 +198,12 @@ private:
         DrawData m_draw;
     };
 
-#ifdef VXL_DEBUG
-        static constexpr const bool ENABLE_VALIDATION_LAYERS = true;
-#else
-        static constexpr const bool ENABLE_VALIDATION_LAYERS = false;
-#endif
-    static constexpr const uint32_t ENABLED_SEVERITY_FLAGS =
-#if VXL_RENDERER_VERBOSE_LOG == VXL_TRUE
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-#endif
-#if VXL_RENDERER_INFO_LOG == VXL_TRUE
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-#endif
-#if VXL_RENDERER_WARNING_LOG == VXL_TRUE
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-#endif
-#if VXL_RENDERER_ERROR_LOG == VXL_TRUE
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-#endif
-    0;
-    static constexpr const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-
     static Settings sSettings;
+    static RenderDevice sDevice;
+    static GPUDevice sGPU;
+
     static VkInstance sInstance;
     static VkDebugUtilsMessengerEXT sDebugMessenger;
-    static VkPhysicalDevice sPhysicalDevice;
-    static VkDevice sDevice;
-    static VkQueue sGraphicsQueue;
-    static VkQueue sPresentationQueue;
-    static VkQueue sTransferQueue;
     static VkSurfaceKHR sSurface;
     static VkSwapchainKHR sSwapChain;
     static std::vector<VkImage> sSwapChainImages;
@@ -155,10 +212,7 @@ private:
     static std::vector<VkImageView> sSwapChainImageViews;
     static VkRenderPass sRenderPass;
     static std::vector<VkFramebuffer> sSwapChainFramebuffers;
-    static VkCommandPool sCommandPool;
-    static VkCommandPool sTransferCommandPool;
     static uint32_t sCurrentFrame;
-    static QueueFamilies sQueueFamilies;
 
     static VkCommandBuffer sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
     static VkSemaphore sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
@@ -168,48 +222,46 @@ private:
 
     static uint32_t sImageIndex;
 
-    static std::vector<const char*> sLayers;
     static std::vector<const char*> sInstanceExtensions;
-    static std::vector<const char*> sDeviceExtensions;
     static Logger sLogger;
-    static VkApplicationInfo sAppInfo;
-    static VkDebugUtilsMessengerCreateInfoEXT sDebugMessengerInfo;
 
     static std::deque<Command> sQueuedCommands;
 
+    static constexpr void DestroyDebugUtilsMessengerEXT() {
+        // Loads the function with instance proc.
+        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+            vkGetInstanceProcAddr(sInstance, "vkDestroyDebugUtilsMessengerEXT");
+
+        // Failed to load if it returns nullptr.
+        if (func)
+            func(sInstance, sDebugMessenger, VK_NULL_HANDLE); // Run normally.
+        else
+            sLogger.Error("Failed to destroy debug messenger! Unable to load vkDestroyDebugUtilsMessengerEXT.");
+    }
+
+    static constexpr void CreateSurface() {
+        if (!Window::CreateSurface(sInstance, sSurface))
+            throw sLogger.RuntimeError("Failed to create surface!", SDL_GetError());
+        sLogger.Info("Created surface.");
+    }
+
     static void SetupRequiredExtensions();
     static bool CheckValidationLayerSupport();
-    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-        VkDebugUtilsMessageTypeFlagsEXT message_type,
-        const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-        void* user_data);
-    static size_t GetPhysicalDeviceScore(VkPhysicalDevice device);
     static void CreateInstance();
     static void CreateDebugMessenger();
     static void CreateSwapChain();
-    static void SelectBestPhysicalDevice();
-    static bool IsPhysicalDeviceUsable(VkPhysicalDevice device);
-    static bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
     static VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
     static VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     static VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-    static QueueFamilies GetQueueFamilies(VkPhysicalDevice device);
-    static SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice device);
-    static void CreateLogicalDevice();
     static VkResult CreateDebugUtilsMessengerEXT(
         const VkDebugUtilsMessengerCreateInfoEXT* create_info,
         const VkAllocationCallbacks* allocator,
         VkDebugUtilsMessengerEXT* debug_messenger);
-    static void DestroyDebugUtilsMessengerEXT(const VkAllocationCallbacks* allocator);
-    static void CreateSurface();
     static void CreateImageViews();
     static void CreateRenderPass();
     static void CreateFramebuffers();
-    static void CreateCommandPool();
     static void CreateCommandBuffer();
     static void CreateSyncObjects();
     static void BeginRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     static void EndRecordCmdBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-    static uint32_t FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties);
 };
