@@ -4,13 +4,13 @@
 #include <cstdint>
 #include <bitset>
 #include <unordered_map>
-#include "util/Logger.h"
 #include <variant>
 #include <util/SparseVector.h>
 #include <world/chunk/ChunkMesh.h>
 #include <world/chunk/ChunkPacking.h>
 #include <array>
 #include <world/Block.h>
+#include "util/Logger.h"
 
 class IChunk {
 public:
@@ -25,6 +25,8 @@ public:
     ChunkMesh::Naive MeshNaive();
 
     ChunkMesh::HyperGreedy MeshHyperGreedy();
+
+    void GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const;
 // protected:
     ChunkPacking m_packingMode;
 
@@ -40,7 +42,7 @@ public:
 
     virtual inline void RawSetBlock(const uint16_t index, const uint16_t newBlock) = 0;
 
-    virtual void GetAirBitmap(std::array<uint32_t, 1024>& bitmap) const = 0;
+    virtual void GetSolidBitmap(std::array<uint32_t, 1024>& bitmap) const = 0;
 // private:
     static Logger sLogger;
 

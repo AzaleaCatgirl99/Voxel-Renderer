@@ -1,5 +1,6 @@
-#include "util/Morton.h"
+#include <bitset>
 #include <iomanip>
+#include "util/Morton.h"
 
 Logger Morton::sLogger = Logger("Morton");
 
