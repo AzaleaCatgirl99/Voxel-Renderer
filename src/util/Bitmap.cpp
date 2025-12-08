@@ -16,128 +16,113 @@ HWY_BEFORE_NAMESPACE();
 namespace HWY_NAMESPACE {
 namespace hw = hwy::HWY_NAMESPACE;
 
-const hw::FixedTag<uint8_t, 8> u8HalfTag;
 const hw::FixedTag<uint8_t, 16> u8Tag;
 const hw::FixedTag<uint16_t, 8> u16Tag;
 const hw::FixedTag<uint32_t, 4> u32Tag;
 const hw::FixedTag<uint64_t, 2> u64Tag;
 
-const hw::Repartition<uint8_t, decltype(u16Tag)> u16Tou8;
-const hw::Repartition<uint16_t, decltype(u8Tag)> u8Tou16;
-const hw::Repartition<uint16_t, decltype(u32Tag)> u32Tou16;
-const hw::Repartition<uint8_t, decltype(u32Tag)> u32Tou8;
-const hw::Repartition<uint64_t, decltype(u8Tag)> u8Tou64;
 const hw::Repartition<uint32_t, decltype(u8Tag)> u8Tou32;
-const hw::Repartition<uint32_t, decltype(u16Tag)> u16Tou32;
-const hw::Repartition<uint64_t, decltype(u16Tag)> u16Tou64;
-const hw::Repartition<uint64_t, decltype(u32Tag)> u32Tou64;
-const hw::Repartition<uint16_t, decltype(u64Tag)> u64Tou16;
-const hw::Repartition<uint32_t, decltype(u64Tag)> u64Tou32;
-const hw::Repartition<uint8_t, decltype(u64Tag)> u64Tou8;
+const hw::Repartition<uint8_t, decltype(u16Tag)> u16Tou8;
+const hw::Repartition<uint16_t, decltype(u32Tag)> u32Tou16;
 
-constexpr auto StageFour128(auto vec, auto bitmask) {
-    auto shuffled = hw::BitCast(u32Tou64, hw::Per4LaneBlockShuffle<3, 1, 2, 0>(hw::BitCast(u8Tou32, vec)));
-    auto swap = hw::And(hw::Xor(shuffled, hw::ShiftRight<34>(shuffled)), bitmask);
-    auto swapped = hw::Xor3(shuffled, swap, hw::ShiftLeft<34>(swap));
-    auto unshuffled = hw::Per4LaneBlockShuffle<3, 1, 2, 0>(hw::BitCast(u64Tou32, swapped));
-    return hw::BitCast(u32Tou8, unshuffled);
+void constexpr SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
+    uint32_t t = ((b >> shift) ^ a) & mask;
+    a ^= t;
+    b ^= (t << shift);
 }
 
-constexpr auto StageFive128(auto vec, auto bitmask) {
-    auto shuffle1 = hw::Per4LaneBlockShuffle<0, 2, 1, 3>(hw::BitCast(u8Tou16, vec));
-    auto shuffle2 = hw::BitCast(u8Tou16, hw::Per4LaneBlockShuffle<0, 2, 1, 3>(hw::BitCast(u16Tou8, shuffle1)));
-    auto swap = hw::And(hw::Xor(shuffle2, hw::ShiftRight<9>(shuffle2)), bitmask);
-    auto swapped = hw::Xor3(shuffle2, swap, hw::ShiftLeft<9>(swap));
-    auto shuffle3 = hw::Per4LaneBlockShuffle<0, 2, 1, 3>(hw::BitCast(u16Tou8,swapped));
-    auto shuffle4 = hw::Per4LaneBlockShuffle<0, 2, 1, 3>(hw::BitCast(u8Tou16, shuffle3));
-    return hw::BitCast(u16Tou8, shuffle4);
+void constexpr SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) {
+    uint64_t t = ((b >> shift) ^ a) & mask;
+    a ^= t;
+    b ^= (t << shift);
 }
 
 void Inner3DTranspose128Impl(uint32_t* bitmap) {
-    uint8_t* bitmap8 = reinterpret_cast<uint8_t*>(bitmap);
-    uint16_t* bitmap16 = reinterpret_cast<uint16_t*>(bitmap);
-    const size_t numLanes = hw::Lanes(u32Tag);
+    uint64_t* bitmap64 = reinterpret_cast<uint64_t*>(bitmap);
 
-    for (size_t i = 0; i < 32; i++) {
-        // Load the slice.
-        auto firstVec1 = hw::Load(u16Tag, bitmap16 + (i * 64)); // 1-8.
-        auto firstVec2 = hw::Load(u16Tag, bitmap16 + (i * 64) + 8); // 1-8.
-        auto firstVec3 = hw::Load(u16Tag, bitmap16 + (i * 64) + 16); // 9-16.
-        auto firstVec4 = hw::Load(u16Tag, bitmap16 + (i * 64) + 24); // 9-16.
-        auto firstVec5 = hw::Load(u16Tag, bitmap16 + (i * 64) + 32); // 17-24.
-        auto firstVec6 = hw::Load(u16Tag, bitmap16 + (i * 64) + 40); // 17-24.
-        auto firstVec7 = hw::Load(u16Tag, bitmap16 + (i * 64) + 48); // 25-32.
-        auto firstVec8 = hw::Load(u16Tag, bitmap16 + (i * 64) + 56); // 25-32.
+    auto bitMask1 = hw::Set(u8Tag, 0x0F);
+    auto bitMask2 = hw::Set(u64Tag, 0x0000'0000'3333'3333ULL);
+    auto bitMask3 = hw::Set(u64Tag, 0x0000'0000'5555'5555ULL);
 
-        // Stage 1.   
-        auto secondVec1 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec5, firstVec1));
-        auto secondVec2 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec6, firstVec2));
-        auto secondVec3 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec7, firstVec3));
-        auto secondVec4 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec8, firstVec4));
-        auto secondVec5 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec5, firstVec1));
-        auto secondVec6 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec6, firstVec2));
-        auto secondVec7 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec7, firstVec3));
-        auto secondVec8 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec8, firstVec4));
+    constexpr int chunkSize = 4; // 4 was profiled to have the best performance.
+    
+    for (int chunkStart = 0; chunkStart < 32; chunkStart += chunkSize) {
+        int chunkEnd = std::min(chunkStart + chunkSize, 32);
+        
+        // Pipeline stages 1-3 for the chunk with SIMD.
+        for (int layer = chunkStart; layer < chunkEnd; layer++) {
+            uint32_t* layerPtr = bitmap + layer * 32;
 
-        // Stage 2.
-        auto thirdVec1 = hw::InterleaveOdd(u8Tag, secondVec3, secondVec1);
-        auto thirdVec2 = hw::InterleaveOdd(u8Tag, secondVec4, secondVec2);
-        auto thirdVec3 = hw::InterleaveEven(u8Tag, secondVec3, secondVec1); 
-        auto thirdVec4 = hw::InterleaveEven(u8Tag, secondVec4, secondVec2);
-        auto thirdVec5 = hw::InterleaveOdd(u8Tag, secondVec7, secondVec5);
-        auto thirdVec6 = hw::InterleaveOdd(u8Tag, secondVec8, secondVec6);
-        auto thirdVec7 = hw::InterleaveEven(u8Tag, secondVec7, secondVec5);
-        auto thirdVec8 = hw::InterleaveEven(u8Tag, secondVec8, secondVec6); 
+            // Load the slice.
+            auto firstVec1 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr)); // 1-8.
+            auto firstVec2 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 4)); // 1-8.
+            auto firstVec3 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 8)); // 9-16.
+            auto firstVec4 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 12)); // 9-16.
+            auto firstVec5 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 16)); // 17-24.
+            auto firstVec6 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 20)); // 17-24.
+            auto firstVec7 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 24)); // 25-32.
+            auto firstVec8 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 28)); // 25-32.
 
-        // Stage 3.
-        auto bitMask1 = hw::Set(u8Tag, 0x0F);
+            // Stage 1.   
+            auto secondVec1 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec5, firstVec1));
+            auto secondVec2 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec6, firstVec2));
+            auto secondVec3 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec7, firstVec3));
+            auto secondVec4 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec8, firstVec4));
+            auto secondVec5 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec5, firstVec1));
+            auto secondVec6 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec6, firstVec2));
+            auto secondVec7 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec7, firstVec3));
+            auto secondVec8 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec8, firstVec4));
 
-        auto swap1 = hw::And(hw::Xor(thirdVec1, hw::ShiftRight<4>(thirdVec2)), bitMask1);
-        auto fourthVec1 = hw::Xor(thirdVec1, swap1);
-        auto fourthVec2 = hw::Xor(thirdVec2, hw::ShiftLeft<4>(swap1));
-        auto swap2 = hw::And(hw::Xor(thirdVec3, hw::ShiftRight<4>(thirdVec4)), bitMask1);
-        auto fourthVec3 = hw::Xor(thirdVec3, swap2);
-        auto fourthVec4 = hw::Xor(thirdVec4, hw::ShiftLeft<4>(swap2));
-        auto swap3 = hw::And(hw::Xor(thirdVec5, hw::ShiftRight<4>(thirdVec6)), bitMask1);
-        auto fourthVec5 = hw::Xor(thirdVec5, swap3);
-        auto fourthVec6 = hw::Xor(thirdVec6, hw::ShiftLeft<4>(swap3));
-        auto swap4 = hw::And(hw::Xor(thirdVec7, hw::ShiftRight<4>(thirdVec8)), bitMask1);
-        auto fourthVec7 = hw::Xor(thirdVec7, swap4);
-        auto fourthVec8 = hw::Xor(thirdVec8, hw::ShiftLeft<4>(swap4));
+            // Stage 2.
+            auto thirdVec1 = hw::InterleaveOdd(u8Tag, secondVec3, secondVec1);
+            auto thirdVec2 = hw::InterleaveOdd(u8Tag, secondVec4, secondVec2);
+            auto thirdVec3 = hw::InterleaveEven(u8Tag, secondVec3, secondVec1); 
+            auto thirdVec4 = hw::InterleaveEven(u8Tag, secondVec4, secondVec2);
+            auto thirdVec5 = hw::InterleaveOdd(u8Tag, secondVec7, secondVec5);
+            auto thirdVec6 = hw::InterleaveOdd(u8Tag, secondVec8, secondVec6);
+            auto thirdVec7 = hw::InterleaveEven(u8Tag, secondVec7, secondVec5);
+            auto thirdVec8 = hw::InterleaveEven(u8Tag, secondVec8, secondVec6); 
 
-        // Stage 4.
-        auto bitMask2 = hw::Set(u64Tag, 0x0000'0000'3333'3333ULL);
+            // Stage 3.
+            auto firstSwap1 = hw::And(hw::Xor(thirdVec1, hw::ShiftRight<4>(thirdVec2)), bitMask1);
+            auto fourthVec1 = hw::Xor(thirdVec1, firstSwap1);
+            auto fourthVec2 = hw::Xor(thirdVec2, hw::ShiftLeft<4>(firstSwap1));
+            auto firstSwap2 = hw::And(hw::Xor(thirdVec3, hw::ShiftRight<4>(thirdVec4)), bitMask1);
+            auto fourthVec3 = hw::Xor(thirdVec3, firstSwap2);
+            auto fourthVec4 = hw::Xor(thirdVec4, hw::ShiftLeft<4>(firstSwap2));
+            auto firstSwap3 = hw::And(hw::Xor(thirdVec5, hw::ShiftRight<4>(thirdVec6)), bitMask1);
+            auto fourthVec5 = hw::Xor(thirdVec5, firstSwap3);
+            auto fourthVec6 = hw::Xor(thirdVec6, hw::ShiftLeft<4>(firstSwap3));
+            auto firstSwap4 = hw::And(hw::Xor(thirdVec7, hw::ShiftRight<4>(thirdVec8)), bitMask1);
+            auto fourthVec7 = hw::Xor(thirdVec7, firstSwap4);
+            auto fourthVec8 = hw::Xor(thirdVec8, hw::ShiftLeft<4>(firstSwap4));
 
-        auto fifthVec1 = StageFour128(fourthVec1, bitMask2);
-        auto fifthVec2 = StageFour128(fourthVec2, bitMask2);
-        auto fifthVec3 = StageFour128(fourthVec3, bitMask2);
-        auto fifthVec4 = StageFour128(fourthVec4, bitMask2);
-        auto fifthVec5 = StageFour128(fourthVec5, bitMask2);
-        auto fifthVec6 = StageFour128(fourthVec6, bitMask2);
-        auto fifthVec7 = StageFour128(fourthVec7, bitMask2);
-        auto fifthVec8 = StageFour128(fourthVec8, bitMask2);
+            // Store the results.
+            hw::Store(hw::BitCast(u8Tou32, fourthVec1), u32Tag, layerPtr);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec2), u32Tag, layerPtr + 4);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec3), u32Tag, layerPtr + 8);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec4), u32Tag, layerPtr + 12);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec5), u32Tag, layerPtr + 16);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec6), u32Tag, layerPtr + 20);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec7), u32Tag, layerPtr + 24);
+            hw::Store(hw::BitCast(u8Tou32, fourthVec8), u32Tag, layerPtr + 28);
+        }
 
-        // Stage 5.
-        auto bitMask3 = hw::Set(u16Tag, 0x0055);
+        // Pipeline Stage 4 for the chunk. SIMD too expensive.
+        for (int layer = chunkStart; layer < chunkEnd; layer++) {
+            uint64_t* slice64 = bitmap64 + layer * 16;
+            for (int i = 0; i < 16; i += 2) {
+                SwapBits64(slice64[i], slice64[i + 1], 0x3333333333333333ULL, 2); // 00110011
+            }
+        }
 
-        auto sixthVec1 = StageFive128(fifthVec1, bitMask3);
-        auto sixthVec2 = StageFive128(fifthVec2, bitMask3);
-        auto sixthVec3 = StageFive128(fifthVec3, bitMask3);
-        auto sixthVec4 = StageFive128(fifthVec4, bitMask3);
-        auto sixthVec5 = StageFive128(fifthVec5, bitMask3);
-        auto sixthVec6 = StageFive128(fifthVec6, bitMask3);
-        auto sixthVec7 = StageFive128(fifthVec7, bitMask3);
-        auto sixthVec8 = StageFive128(fifthVec8, bitMask3);
-
-        // Store the results.
-        hw::Store(sixthVec1, u8Tag, bitmap8 + (i * 128));
-        hw::Store(sixthVec2, u8Tag, bitmap8 + (i * 128) + 8*2);
-        hw::Store(sixthVec3, u8Tag, bitmap8 + (i * 128) + 16*2);
-        hw::Store(sixthVec4, u8Tag, bitmap8 + (i * 128) + 24*2);
-        hw::Store(sixthVec5, u8Tag, bitmap8 + (i * 128) + 32*2);
-        hw::Store(sixthVec6, u8Tag, bitmap8 + (i * 128) + 40*2);
-        hw::Store(sixthVec7, u8Tag, bitmap8 + (i * 128) + 48*2);
-        hw::Store(sixthVec8, u8Tag, bitmap8 + (i * 128) + 56*2);
+        // Pipeline Stage 5 for the chunk. SIMD too expensive.
+        for (int layer = chunkStart; layer < chunkEnd; layer++) {
+            uint32_t* slice32 = bitmap + layer * 32;
+            for (int i = 0; i < 32; i += 2) {
+                SwapBits32(slice32[i], slice32[i+1], 0x55555555U, 1); // 0101
+            }
+        }
     }
 }
 
@@ -226,7 +211,7 @@ void Bitmap::Inner3DTransposeScalar(std::array<uint32_t, 1024>& bitmap) {
             }
         }
         
-        // Pipeline Stage 4 for the chunk.
+        // // Pipeline Stage 4 for the chunk.
         for (int layer = chunkStart; layer < chunkEnd; layer++) {
             uint64_t* slice64 = data64 + layer * 16;
             for (int i = 0; i < 8; i++) {

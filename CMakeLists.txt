@@ -12,8 +12,6 @@ project(Voxel-Renderer
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 23)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
-
 add_compile_options(-march=native)
 
 # Default settings for the program
