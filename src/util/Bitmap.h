@@ -11,6 +11,8 @@ public:
 
     static void Outer3DTransposeNaive(const std::array<uint32_t, 1024>& sourceMap, std::array<uint32_t, 1024>& newMap);
 
+    static void Outer3DTransposeScalar(std::array<uint32_t, 1024>& bitmap);
+
     static void Inner3DTranspose(std::array<uint32_t, 1024>& bitmap);
 
     static void Inner3DTransposeNaive(const std::array<uint32_t, 1024>& sourceMap, std::array<uint32_t, 1024>& newMap);
@@ -24,6 +26,8 @@ public:
     static bool TestOuter3DTransposes(const std::array<uint32_t, 1024>& sourceMap);
 
     static void Log3DSlice(const std::array<uint32_t, 1024>& sourceMap, uint8_t layer = 0);
+
+    static void Log3DOuterSlice(const std::array<uint32_t, 1024>& sourceMap);
 
     static void constexpr SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
         uint32_t t = (std::rotr(a, shift) ^ b) & mask;

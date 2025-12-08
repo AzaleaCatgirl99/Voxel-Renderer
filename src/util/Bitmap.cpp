@@ -24,6 +24,8 @@ const hw::FixedTag<uint64_t, 2> u64Tag;
 const hw::Repartition<uint32_t, decltype(u8Tag)> u8Tou32;
 const hw::Repartition<uint8_t, decltype(u16Tag)> u16Tou8;
 const hw::Repartition<uint16_t, decltype(u32Tag)> u32Tou16;
+const hw::Repartition<uint64_t, decltype(u32Tag)> u32Tou64;
+const hw::Repartition<uint32_t, decltype(u64Tag)> u64Tou32;
 
 void constexpr SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
     uint32_t t = ((b >> shift) ^ a) & mask;
@@ -108,7 +110,7 @@ void Inner3DTranspose128Impl(uint32_t* bitmap) {
             hw::Store(hw::BitCast(u8Tou32, fourthVec8), u32Tag, layerPtr + 28);
         }
 
-        // Pipeline Stage 4 for the chunk. SIMD too expensive.
+        // Pipeline Stage 4 for the chunk. SIMD more expensive.
         for (int layer = chunkStart; layer < chunkEnd; layer++) {
             uint64_t* slice64 = bitmap64 + layer * 16;
             for (int i = 0; i < 16; i += 2) {
@@ -116,12 +118,84 @@ void Inner3DTranspose128Impl(uint32_t* bitmap) {
             }
         }
 
-        // Pipeline Stage 5 for the chunk. SIMD too expensive.
+        // Pipeline Stage 5 for the chunk. SIMD more expensive.
         for (int layer = chunkStart; layer < chunkEnd; layer++) {
             uint32_t* slice32 = bitmap + layer * 32;
             for (int i = 0; i < 32; i += 2) {
                 SwapBits32(slice32[i], slice32[i+1], 0x55555555U, 1); // 0101
             }
+        }
+    }
+}
+
+// 0011 OBA
+// 0011 OBA
+// 1100 EAB
+// 1100 EAB
+
+// 0101 OAB
+// 1010 EAB
+// 0101
+// 1010
+
+constexpr void TransposeFour128(uint32_t* bitmap) {
+    auto firstVec1 = hw::BitCast(u32Tou64, hw::Load(u32Tag, bitmap));
+    auto firstVec2 = hw::BitCast(u32Tou64, hw::Load(u32Tag, bitmap + 32));
+    auto firstVec3 = hw::BitCast(u32Tou64, hw::Load(u32Tag, bitmap + 64));
+    auto firstVec4 = hw::BitCast(u32Tou64, hw::Load(u32Tag, bitmap + 96));
+
+    auto secondVec1 = hw::BitCast(u64Tou32, hw::InterleaveEven(u64Tag, firstVec1, firstVec3));
+    auto secondVec2 = hw::BitCast(u64Tou32, hw::InterleaveEven(u64Tag, firstVec2, firstVec4));
+    auto secondVec3 = hw::BitCast(u64Tou32, hw::InterleaveOdd(u64Tag, firstVec1, firstVec3));
+    auto secondVec4 = hw::BitCast(u64Tou32, hw::InterleaveOdd(u64Tag, firstVec2, firstVec4));
+
+    auto thirdVec1 = hw::InterleaveEven(u32Tag, secondVec1, secondVec2);
+    auto thirdVec2 = hw::InterleaveOdd(u32Tag, secondVec1, secondVec2);
+    auto thirdVec3 = hw::InterleaveEven(u32Tag, secondVec3, secondVec4);
+    auto thirdVec4 = hw::InterleaveOdd(u32Tag, secondVec3, secondVec4);
+
+    hw::Store(thirdVec1, u32Tag, bitmap);
+    hw::Store(thirdVec2, u32Tag, bitmap + 32);
+    hw::Store(thirdVec3, u32Tag, bitmap + 64);
+    hw::Store(thirdVec4, u32Tag, bitmap + 96);
+}
+
+constexpr void SwapBlock128(uint32_t* source, uint32_t* destination) { 
+    auto srcVec1 = hw::Load(u32Tag, source);
+    auto srcVec2 = hw::Load(u32Tag, source + 32);
+    auto srcVec3 = hw::Load(u32Tag, source + 64);
+    auto srcVec4 = hw::Load(u32Tag, source + 96);
+
+    auto destVec1 = hw::Load(u32Tag, destination);
+    auto destVec2 = hw::Load(u32Tag, destination + 32);
+    auto destVec3 = hw::Load(u32Tag, destination + 64);
+    auto destVec4 = hw::Load(u32Tag, destination + 96);
+
+    hw::Store(srcVec1, u32Tag, destination);
+    hw::Store(srcVec2, u32Tag, destination + 32);
+    hw::Store(srcVec3, u32Tag, destination + 64);
+    hw::Store(srcVec4, u32Tag, destination + 96);
+
+    hw::Store(destVec1, u32Tag, source);
+    hw::Store(destVec2, u32Tag, source + 32);
+    hw::Store(destVec3, u32Tag, source + 64);
+    hw::Store(destVec4, u32Tag, source + 96);
+}
+
+void Outer3DTranspose128Impl(uint32_t* bitmap) {
+    // 4x4 block swaps.
+    for (int y = 0; y < 8; y++) {
+        for (int x = y + 1; x < 8; x++) {
+            uint32_t* topLeft = bitmap + (y * 128) + (x * 4);
+            uint32_t* transposedTopLeft = bitmap + (y * 4) + (x * 128); 
+            SwapBlock128(topLeft, transposedTopLeft);
+        }
+    }
+
+    // Individual 4x4 block transposes.
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            TransposeFour128(bitmap + (y * 128) + (x * 4));
         }
     }
 }
@@ -138,6 +212,10 @@ void Bitmap::Inner3DTranspose(std::array<uint32_t, 1024>& bitmap) {
     HWY_STATIC_DISPATCH(Inner3DTranspose128Impl)(bitmap.data());
 }
 
+void Bitmap::Outer3DTranspose(std::array<uint32_t, 1024>& bitmap) {
+    HWY_STATIC_DISPATCH(Outer3DTranspose128Impl)(bitmap.data());
+}
+
 // ========== Scalar ==========
 
 Logger Bitmap::sLogger = Logger("Bitmap");
@@ -151,7 +229,7 @@ void Bitmap::Outer3DTransposeNaive(const std::array<uint32_t, 1024>& sourceMap, 
     }
 }
 
-void Bitmap::Outer3DTranspose(std::array<uint32_t, 1024>& bitmap) {
+void Bitmap::Outer3DTransposeScalar(std::array<uint32_t, 1024>& bitmap) {
     for (uint8_t x = 0; x < 32; x++) {
         for (uint8_t y = x + 1; y < 32; y++) {
             std::swap(bitmap[(y << 5) | x], bitmap[(x << 5) | y]);
@@ -230,9 +308,13 @@ void Bitmap::Inner3DTransposeScalar(std::array<uint32_t, 1024>& bitmap) {
     }
 }
 
+// x y z
+// x z y
+// z x y
 void Bitmap::SwapOuterInnerAxes(std::array<uint32_t, 1024>& bitmap) {
     Inner3DTranspose(bitmap);
-    Outer3DTranspose(bitmap);
+    std::array<uint32_t, 1024> copy = bitmap;
+    Outer3DTransposeNaive(copy, bitmap);
 }
 
 bool Bitmap::TestInner3DTransposes(const std::array<uint32_t, 1024>& sourceMap) {
@@ -262,13 +344,21 @@ bool Bitmap::TestInner3DTransposes(const std::array<uint32_t, 1024>& sourceMap) 
 }
 
 bool Bitmap::TestOuter3DTransposes(const std::array<uint32_t, 1024>& sourceMap) {
+    std::array<uint32_t, 1024> copy = sourceMap;
     std::array<uint32_t, 1024> naive;
-    std::array<uint32_t, 1024> swapper = sourceMap;
+    alignas(16) std::array<uint32_t, 1024> swapper = sourceMap;
 
     Outer3DTransposeNaive(sourceMap, naive);
     Outer3DTranspose(swapper);
 
     if (!Is3DEqual(naive, swapper)) {
+        sLogger.Verbose("Source:");
+        Log3DOuterSlice(copy);
+        sLogger.Verbose("Naive:");
+        Log3DOuterSlice(naive);
+        sLogger.Verbose("Simd:");
+        Log3DOuterSlice(swapper);
+
         sLogger.Warning("Outer transposes do not match!");
         return false;
     }
@@ -287,6 +377,15 @@ bool Bitmap::Is3DEqual(const std::array<uint32_t, 1024>& map1, const std::array<
 void Bitmap::Log3DSlice(const std::array<uint32_t, 1024>& sourceMap, uint8_t layer) {
     for (int i = 0; i < 32; i++) {
         sLogger.Verbose(std::bitset<32>(sourceMap[i + (32 * layer)]));
+    }
+}
+
+void Bitmap::Log3DOuterSlice(const std::array<uint32_t, 1024>& sourceMap) {
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 32; j++) {
+            std::cout << (sourceMap[i * 32 + j] >> 31);
+        }
+        std::cout << std::endl;
     }
 }
 

@@ -69,9 +69,9 @@ static void Test() {
     chunk.SetBlock(2, 0, 31, 0);
     chunk.SetBlock(4, 0, 28, 0);
 
-    for (uint8_t x = 0; x < 32; x++) {
-        for (uint8_t y = 0; y < 32; y++) {
-            for (uint8_t z = 0; z < (32 - y); z++) {
+    for (uint8_t x = 3; x < 32; x++) {
+        for (uint8_t y = 2; y < (32 - x); y++) {
+            for (uint8_t z = 0; z < 32; z++) {
                 // if (distrib(gen) == 1) {
                     chunk.SetBlock(3, x, y, z);
                 // }
@@ -122,10 +122,17 @@ static void Test() {
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Simd inner transpose - Average time taken: ", (end - start) / 100000);
 
-    std::array<uint32_t, 1024> swapOuter = xyzBitmap;
+    std::array<uint32_t, 1024> swapOuterScalar = xyzBitmap;
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
-        Bitmap::Outer3DTranspose(swapOuter);
+        Bitmap::Outer3DTransposeScalar(swapOuterScalar);
     end = std::chrono::high_resolution_clock::now();
-    log.Verbose("Outer transpose - Average time taken: ", (end - start) / 100000);
+    log.Verbose("Scalar outer transpose - Average time taken: ", (end - start) / 100000);
+
+    alignas(16) std::array<uint32_t, 1024> swapOuterSimd = xyzBitmap;
+    start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100000; i++)
+        Bitmap::Outer3DTranspose(swapOuterSimd);
+    end = std::chrono::high_resolution_clock::now();
+    log.Verbose("Simd outer transpose - Average time taken: ", (end - start) / 100000);
 }
