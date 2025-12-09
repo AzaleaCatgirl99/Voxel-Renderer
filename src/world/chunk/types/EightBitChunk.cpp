@@ -12,15 +12,26 @@ HWY_BEFORE_NAMESPACE();
 namespace HWY_NAMESPACE {
 namespace hw = hwy::HWY_NAMESPACE;
 
-void GetSolidBitmapImpl(const uint8_t* blockData, const uint8_t air, uint8_t* bitmap) {
-    const hw::CappedTag<uint8_t, 64> u8Tag;
-    const size_t numLanes = hw::Lanes(u8Tag);
+const hw::CappedTag<uint8_t, 64> u8Tag;
+const size_t numLanes = hw::Lanes(u8Tag);
 
-    auto airVec = hw::Set(u8Tag, air);
-    for (int i = 0; i < 32768; i += numLanes) {
-        auto blockVec = hw::Load(u8Tag, blockData + i);
-        auto resultMask = hw::Eq(blockVec, airVec);
-        hw::StoreMaskBits(u8Tag, resultMask, bitmap + (i / 8));
+void GetSolidBitmapImpl(const uint8_t* blockData, const BlockTypes block, ChunkBitmap& bitmap, const bool invert) {
+    uint8_t* bitmapPtr = reinterpret_cast<uint8_t*>(bitmap.Data());
+
+    auto typeVec = hw::Set(u8Tag, block);
+    
+    if (invert) {
+        for (int i = 0; i < 32768; i += numLanes) {
+            auto dataVec = hw::Load(u8Tag, blockData + i);
+            auto resultMask = hw::Ne(dataVec, typeVec);
+            hw::StoreMaskBits(u8Tag, resultMask, bitmapPtr + (i / 8));
+        }
+    } else {
+        for (int i = 0; i < 32768; i += numLanes) {
+            auto dataVec = hw::Load(u8Tag, blockData + i);
+            auto resultMask = hw::Eq(dataVec, typeVec);
+            hw::StoreMaskBits(u8Tag, resultMask, bitmapPtr + (i / 8));
+        }
     }
 }
 
@@ -32,8 +43,10 @@ HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
 
-void EightBitChunk::GetSolidBitmap(std::array<uint32_t, 1024>& bitmap) const {
-    HWY_STATIC_DISPATCH(GetSolidBitmapImpl)(m_blockData.data(), m_blockPaletteIndices[BlockTypes::Air], reinterpret_cast<uint8_t*>(bitmap.data()));
+ChunkBitmap EightBitChunk::GetBlockBitmap(const BlockTypes block, const bool invert) const {
+    ChunkBitmap bitmap;
+    HWY_STATIC_DISPATCH(GetSolidBitmapImpl)(m_blockData.data(), block, bitmap, invert);
+    return bitmap;
 }
 
 // ========== Scalar ==========

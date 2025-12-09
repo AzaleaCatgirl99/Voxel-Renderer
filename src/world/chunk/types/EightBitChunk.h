@@ -1,6 +1,7 @@
 #pragma once
 
-#include <world/chunk/IChunk.h>
+#include "world/chunk/IChunk.h"
+#include "world/chunk/ChunkBitmap.h"
 
 class EightBitChunk final : public IChunk {
 public:
@@ -14,7 +15,7 @@ public:
 
     inline void RawSetBlock(const uint16_t index, const uint16_t newBlock) override;
 
-    void GetSolidBitmap(std::array<uint32_t, 1024>& bitmap) const override;
+    ChunkBitmap GetBlockBitmap(const BlockTypes block, const bool invert = false) const override;
 private:
     static Logger sLogger;
 

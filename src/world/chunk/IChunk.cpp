@@ -3,7 +3,7 @@
 #include <bit>
 #include <util/Bitmap.h>
 #include <chrono>
-#include "IChunk.h"
+#include "world/chunk/ChunkBitmap.h"
 
 Logger IChunk::sLogger = Logger("Chunk");
 
@@ -68,79 +68,48 @@ ChunkMesh::Naive IChunk::MeshNaive() {
 }
 
 ChunkMesh::HyperGreedy IChunk::MeshHyperGreedy() {
-    auto start = std::chrono::high_resolution_clock::now();
-    std::array<uint32_t, 1024> xyzPos;
-    std::array<uint32_t, 1024> yxzPos;
-    std::array<uint32_t, 1024> xzyPos;
-    std::array<uint32_t, 1024> yzxPos;
+    // Temporary variables for the three axis views. Do not use after culling.
+    ChunkBitmap xyz = GetBlockBitmap(BlockTypes::Air, true);
+    ChunkBitmap yxz = xyz.Copy().OuterTranspose();
+    ChunkBitmap xzy = xyz.Copy().InnerTranspose();
+    ChunkBitmap yzx = yxz.Copy().InnerTranspose();
 
-    auto end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Data allocation completed in ", end - start);
+    // Axis views of visible faces after culling.
+    ChunkBitmap zyxPosCulled = xyz.Copy().CullBackBits().SwapOuterInnerAxes();
+    ChunkBitmap yzxPosCulled = xzy.Copy().CullBackBits().SwapOuterInnerAxes();
+    ChunkBitmap xzyPosCulled = yzx.Copy().CullBackBits().SwapOuterInnerAxes();
 
-    // start = std::chrono::high_resolution_clock::now();
-    GetSolidBitmap(xyzPos);
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Air map created in ", end - start);
+    ChunkBitmap zyxNegCulled = xyz.CullFrontBits().SwapOuterInnerAxes();
+    ChunkBitmap yzxNegCulled = xzy.CullFrontBits().SwapOuterInnerAxes();
+    ChunkBitmap xzyNegCulled = yzx.CullFrontBits().SwapOuterInnerAxes();
 
-    // start = std::chrono::high_resolution_clock::now();
-    yxzPos = xyzPos;
-    Bitmap::Outer3DTranspose(yxzPos);
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Outer transpose 1 done in ", end - start);
 
-    // start = std::chrono::high_resolution_clock::now();
-    xzyPos = xyzPos;
-    Bitmap::Inner3DTranspose(xzyPos);
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Inner transpose 1 done in ", end - start);
-
-    // start = std::chrono::high_resolution_clock::now();
-    yzxPos = yxzPos;
-    Bitmap::Inner3DTranspose(yzxPos);
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Inner transpose 2 done in ", end - start);
 
     ChunkMesh::HyperGreedy mesh;
 
-    // start = std::chrono::high_resolution_clock::now();
-    std::array<uint32_t, 1024> xyzNeg = xyzPos;
-    std::array<uint32_t, 1024> xzyNeg = xzyPos;
-    std::array<uint32_t, 1024> yzxNeg = yzxPos;
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Data cloning done in ", end - start);
-
-    // for (int i = 0; i < 32; i++) {
-    //     sLogger.Verbose("Logging slice ", i);
-    //     Bitmap::Log3DSlice(xyzPos, i);
-    // }
-    // sLogger.Verbose("Logging slice of xyz:");
-    // Bitmap::Log3DSlice(xyzPos);
-    // sLogger.Verbose("Logging slice of yxz:");
-    // Bitmap::Log3DSlice(yxzPos);
-    // sLogger.Verbose("Logging slice of xzy:");
-    // Bitmap::Log3DSlice(xzyPos);
-    // sLogger.Verbose("Logging slice of yzx:");
-    // Bitmap::Log3DSlice(yzxPos);
-
-    // Bitmap::Log3DSlice(xzyPos, 1);
-
-    // for (int i = 0; i < 16; i++) {      
-    //     sLogger.Verbose("Layer: ", i);
-    //     Bitmap::Log3DSlice(xzyPos, i);
-    // }
 
     // start = std::chrono::high_resolution_clock::now();
-    for (uint16_t i = 0; i < 1024; i++) {
-        xyzPos[i] &= ~(xyzPos[i] >> 1);
-        xzyPos[i] &= ~(xzyPos[i] >> 1);
-        yzxPos[i] &= ~(yzxPos[i] >> 1);
+    // for (uint16_t i = 0; i < 1024; i++) {
+    //     xyzPos[i] &= ~(xyzPos[i] >> 1);
+    //     xzyPos[i] &= ~(xzyPos[i] >> 1);
+    //     yzxPos[i] &= ~(yzxPos[i] >> 1);
 
-        xyzNeg[i] &= ~(xyzNeg[i] << 1);
-        xzyNeg[i] &= ~(xzyNeg[i] << 1);
-        yzxNeg[i] &= ~(yzxNeg[i] << 1);
-    }
+    //     xyzNeg[i] &= ~(xyzNeg[i] << 1);
+    //     xzyNeg[i] &= ~(xzyNeg[i] << 1);
+    //     yzxNeg[i] &= ~(yzxNeg[i] << 1);
+    // }
     // end = std::chrono::high_resolution_clock::now();
     // sLogger.Verbose("Face culling done in ", end - start);
+    // sLogger.Verbose("");
+    // for (int i = 14; i < 17; i++) {
+    //     sLogger.Verbose("Layer ", i, ":");
+    //     yzxNegCulled.LogInnerSlice(i);
+    // }
+
+    // for (int i = 0; i < 32; i++) {
+    //     sLogger.Verbose("Layer ", i, ":");
+    //     yzxNegCulled.LogInnerSlice(i);
+    // }
 
     // start = std::chrono::high_resolution_clock::now();
 
@@ -149,13 +118,13 @@ ChunkMesh::HyperGreedy IChunk::MeshHyperGreedy() {
     // zxy
     // zyx .
 
-    Bitmap::SwapOuterInnerAxes(xyzPos); // zyx
-    Bitmap::SwapOuterInnerAxes(xzyPos); // yxz : xyz -> yxz
-    Bitmap::SwapOuterInnerAxes(yzxPos); // xzy : 
+    // Bitmap::SwapOuterInnerAxes(xyzPos); // zyx
+    // Bitmap::SwapOuterInnerAxes(xzyPos); // yxz : xyz -> yxz
+    // Bitmap::SwapOuterInnerAxes(yzxPos); // xzy : 
 
-    Bitmap::SwapOuterInnerAxes(xyzNeg);
-    Bitmap::SwapOuterInnerAxes(xzyNeg);
-    Bitmap::SwapOuterInnerAxes(yzxNeg);
+    // Bitmap::SwapOuterInnerAxes(xyzNeg);
+    // Bitmap::SwapOuterInnerAxes(xzyNeg);
+    // Bitmap::SwapOuterInnerAxes(yzxNeg);
     // end = std::chrono::high_resolution_clock::now();
     // sLogger.Verbose("Axis alignment done in ", end - start);
 
@@ -164,14 +133,14 @@ ChunkMesh::HyperGreedy IChunk::MeshHyperGreedy() {
     //     Bitmap::Log3DSlice(yzxPosCulled, i);
     // }
 
-    std::vector<uint32_t> faces;
-    faces.reserve(100);
+    // std::vector<uint32_t> faces;
+    // faces.reserve(100);
 
-    start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 100000; i++)
-        GreedyMeshBitmap(faces, xyzPos, 0);
-    end = std::chrono::high_resolution_clock::now();
-    sLogger.Verbose(" --- Greedy meshing done on average in ", (end - start) / 100000);
+    // start = std::chrono::high_resolution_clock::now();
+    // for (int i = 0; i < 100000; i++)
+    //     GreedyMeshBitmap(faces, xyzPos, 0);
+    // end = std::chrono::high_resolution_clock::now();
+    // sLogger.Verbose(" --- Greedy meshing done on average in ", (end - start) / 100000);
 
     return mesh;
 }

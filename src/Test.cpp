@@ -5,6 +5,7 @@
 #include <world/chunk/IChunk.h>
 #include <chrono>
 #include <random>
+#include "world/chunk/ChunkBitmap.h"
 
 static void Test() {
     Logger log = Logger("Test");
@@ -70,7 +71,7 @@ static void Test() {
     chunk.SetBlock(4, 0, 28, 0);
 
     for (uint8_t x = 3; x < 32; x++) {
-        for (uint8_t y = 2; y < (32 - x); y++) {
+        for (uint8_t y = 0; y < 16; y++) {
             for (uint8_t z = 0; z < 32; z++) {
                 // if (distrib(gen) == 1) {
                     chunk.SetBlock(3, x, y, z);
@@ -84,55 +85,59 @@ static void Test() {
     // Hyper Greedy mesh.
     start = std::chrono::high_resolution_clock::now();
     code = 0;
-    for (int i = 0; i < 1; i++)
+    for (int i = 0; i < 100000; i++)
         chunk.MeshHyperGreedy();
     end = std::chrono::high_resolution_clock::now();
-    // log.Verbose("Hyper greedy data prep average over 100k: ", (end - start) / 1);
+    log.Verbose("Hyper greedy data prep average over 100k: ", (end - start) / 100000);
 
     log.Println("\n-+-+-+-+-+-+-+ Testing air bit map:");
     // Create air bit map.
     start = std::chrono::high_resolution_clock::now();
-    alignas(16) std::array<uint32_t, 1024> xyzBitmap{};
-    for (int i = 0; i < 100000; i++)
-        chunk.GetSolidBitmap(xyzBitmap);
+    ChunkBitmap xyz;
+
+    for (int i = 0; i < 100000; i++) {
+        xyz = chunk.GetBlockBitmap(BlockTypes::Air, true);
+    }
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Air bit map created! Average time taken: ", (end - start) / 100000);
 
     // for (int i = 0; i < 32; i++) {
     //     log.Verbose("Layer: ", i);
-    //     Bitmap::Log3DSlice(xyzBitmap, i);
+    //     xyz.LogOuterSlice(i);
     // }
 
     log.Println("\n-+-+-+-+-+-+-+ Testing transposition:");
 
-    if (Bitmap::TestInner3DTransposes(xyzBitmap) && Bitmap::TestOuter3DTransposes(xyzBitmap))
-        log.Verbose("Accuracy of transposition algorithms verified!");
+    // ChunkBitmap xyz = xyzBitmap;
 
-    alignas(16) std::array<uint32_t, 1024> innerTestScalar = xyzBitmap;
+    xyz.TestOuterTransposes();
+    xyz.TestInnerTransposes();
+
+    ChunkBitmap innerTestScalar = xyz.Copy();
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
-        Bitmap::Inner3DTransposeScalar(innerTestScalar);
+        xyz.InnerTransposeScalar();
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Scalar inner transpose - Average time taken: ", (end - start) / 100000);
 
-    alignas(16) std::array<uint32_t, 1024> innerTest = xyzBitmap;
+    ChunkBitmap innerTest = xyz.Copy();
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
-        Bitmap::Inner3DTranspose(innerTest);
+        innerTest.InnerTranspose();
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Simd inner transpose - Average time taken: ", (end - start) / 100000);
 
-    std::array<uint32_t, 1024> swapOuterScalar = xyzBitmap;
+    ChunkBitmap swapOuterScalar = xyz.Copy();
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
-        Bitmap::Outer3DTransposeScalar(swapOuterScalar);
+        swapOuterScalar.OuterTransposeScalar();
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Scalar outer transpose - Average time taken: ", (end - start) / 100000);
 
-    alignas(16) std::array<uint32_t, 1024> swapOuterSimd = xyzBitmap;
+    ChunkBitmap swapOuterSimd = xyz.Copy();
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
-        Bitmap::Outer3DTranspose(swapOuterSimd);
+        swapOuterSimd.OuterTranspose();
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Simd outer transpose - Average time taken: ", (end - start) / 100000);
 }

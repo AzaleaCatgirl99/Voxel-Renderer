@@ -5,12 +5,13 @@
 #include <bitset>
 #include <unordered_map>
 #include <variant>
-#include <util/SparseVector.h>
-#include <world/chunk/ChunkMesh.h>
-#include <world/chunk/ChunkPacking.h>
 #include <array>
-#include <world/Block.h>
+#include "util/SparseVector.h"
 #include "util/Logger.h"
+#include "world/chunk/ChunkMesh.h"
+#include "world/chunk/ChunkPacking.h"
+#include "world/chunk/ChunkBitmap.h"
+#include "world/Block.h"
 
 class IChunk {
 public:
@@ -27,7 +28,7 @@ public:
     ChunkMesh::HyperGreedy MeshHyperGreedy();
 
     void GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const;
-// protected:
+protected:
     ChunkPacking m_packingMode;
 
     SparseVector<uint16_t, uint16_t> m_blockPalette; // List of block IDs.
@@ -42,9 +43,7 @@ public:
 
     virtual inline void RawSetBlock(const uint16_t index, const uint16_t newBlock) = 0;
 
-    virtual void GetSolidBitmap(std::array<uint32_t, 1024>& bitmap) const = 0;
-// private:
+    virtual ChunkBitmap GetBlockBitmap(const BlockTypes block, const bool invert = false) const = 0;
+private:
     static Logger sLogger;
-
-    static void CullInvisibleFacesBitmap(std::array<uint32_t, 1024>& bitmap);
 };
