@@ -82,21 +82,46 @@ static void Test() {
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Chunk data inserted! Time taken: ", end - start, " (Naive insert, disregard)");
 
+    // Create greedy mesh variables.
+    ChunkBitmap xyz = chunk.GetBlockBitmap(BlockTypes::Air, true);
+    ChunkBitmap yxz = xyz.Copy().OuterTranspose();
+    ChunkBitmap xzy = xyz.Copy().InnerTranspose();
+    ChunkBitmap yzx = yxz.Copy().InnerTranspose();
+
+    // Axis views of visible faces after culling.
+    ChunkBitmap zyxPosCulled = xyz.Copy().CullBackBits().SwapOuterInnerAxes();
+    ChunkBitmap yzxPosCulled = xzy.Copy().CullBackBits().SwapOuterInnerAxes();
+    ChunkBitmap xzyPosCulled = yzx.Copy().CullBackBits().SwapOuterInnerAxes();
+
+    ChunkBitmap zyxNegCulled = xyz.CullFrontBits().SwapOuterInnerAxes();
+    ChunkBitmap yzxNegCulled = xzy.CullFrontBits().SwapOuterInnerAxes();
+    ChunkBitmap xzyNegCulled = yzx.CullFrontBits().SwapOuterInnerAxes();
+
+    std::vector<uint32_t> vertices;
+
     // Hyper Greedy mesh.
     start = std::chrono::high_resolution_clock::now();
     code = 0;
     for (int i = 0; i < 100000; i++)
-        chunk.MeshHyperGreedy();
+        zyxNegCulled.GreedyMeshBitmap(vertices);
     end = std::chrono::high_resolution_clock::now();
-    log.Verbose("Hyper greedy data prep average over 100k: ", (end - start) / 100000);
+    log.Verbose("Greedy total average over 100k: ", (end - start) / 100000);
+
+    // Meshing pass.
+    start = std::chrono::high_resolution_clock::now();
+    code = 0;
+    for (int i = 0; i < 100000; i++)
+        chunk.MeshGreedy();
+    end = std::chrono::high_resolution_clock::now();
+    log.Verbose("Greedy average over 100k: ", (end - start) / 100000);
 
     log.Println("\n-+-+-+-+-+-+-+ Testing air bit map:");
     // Create air bit map.
     start = std::chrono::high_resolution_clock::now();
-    ChunkBitmap xyz;
+    ChunkBitmap xyzTest;
 
     for (int i = 0; i < 100000; i++) {
-        xyz = chunk.GetBlockBitmap(BlockTypes::Air, true);
+        xyzTest = chunk.GetBlockBitmap(BlockTypes::Air, true);
     }
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Air bit map created! Average time taken: ", (end - start) / 100000);

@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <bit>
+#include <vector>
 #include "util/Logger.h"
 
 class ChunkBitmap final {
@@ -13,6 +14,8 @@ public:
 
     ChunkBitmap(const std::array<uint32_t, 1024>& otherBitmap) : m_bitmap(otherBitmap) {};
 
+    void GreedyMeshBitmap(std::vector<uint32_t>& vertices);
+    
     ChunkBitmap& CullBackBits();
 
     ChunkBitmap& CullFrontBits();

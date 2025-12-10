@@ -25,10 +25,10 @@ public:
 
     ChunkMesh::Naive MeshNaive();
 
-    ChunkMesh::HyperGreedy MeshHyperGreedy();
+    ChunkMesh::Greedy MeshGreedy();
 
     void GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const;
-protected:
+// protected:
     ChunkPacking m_packingMode;
 
     SparseVector<uint16_t, uint16_t> m_blockPalette; // List of block IDs.

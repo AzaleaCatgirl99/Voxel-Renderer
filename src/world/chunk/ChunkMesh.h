@@ -13,10 +13,9 @@ public:
         }
     };
 
-    struct HyperGreedy {
+    struct Greedy {
         std::vector<uint32_t> m_vertices;
-        std::vector<uint32_t> m_mortonBlocks;
 
-        HyperGreedy() = default;
+        Greedy() = default;
     };
 };

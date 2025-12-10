@@ -67,7 +67,7 @@ ChunkMesh::Naive IChunk::MeshNaive() {
     return mesh;
 }
 
-ChunkMesh::HyperGreedy IChunk::MeshHyperGreedy() {
+ChunkMesh::Greedy IChunk::MeshGreedy() {
     // Temporary variables for the three axis views. Do not use after culling.
     ChunkBitmap xyz = GetBlockBitmap(BlockTypes::Air, true);
     ChunkBitmap yxz = xyz.Copy().OuterTranspose();
@@ -83,100 +83,45 @@ ChunkMesh::HyperGreedy IChunk::MeshHyperGreedy() {
     ChunkBitmap yzxNegCulled = xzy.CullFrontBits().SwapOuterInnerAxes();
     ChunkBitmap xzyNegCulled = yzx.CullFrontBits().SwapOuterInnerAxes();
 
+    ChunkMesh::Greedy mesh;
 
-
-    ChunkMesh::HyperGreedy mesh;
-
-
-    // start = std::chrono::high_resolution_clock::now();
-    // for (uint16_t i = 0; i < 1024; i++) {
-    //     xyzPos[i] &= ~(xyzPos[i] >> 1);
-    //     xzyPos[i] &= ~(xzyPos[i] >> 1);
-    //     yzxPos[i] &= ~(yzxPos[i] >> 1);
-
-    //     xyzNeg[i] &= ~(xyzNeg[i] << 1);
-    //     xzyNeg[i] &= ~(xzyNeg[i] << 1);
-    //     yzxNeg[i] &= ~(yzxNeg[i] << 1);
-    // }
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Face culling done in ", end - start);
-    // sLogger.Verbose("");
-    // for (int i = 14; i < 17; i++) {
-    //     sLogger.Verbose("Layer ", i, ":");
-    //     yzxNegCulled.LogInnerSlice(i);
-    // }
-
-    // for (int i = 0; i < 32; i++) {
-    //     sLogger.Verbose("Layer ", i, ":");
-    //     yzxNegCulled.LogInnerSlice(i);
-    // }
-
-    // start = std::chrono::high_resolution_clock::now();
-
-    // xyz .
-    // xzy .
-    // zxy
-    // zyx .
-
-    // Bitmap::SwapOuterInnerAxes(xyzPos); // zyx
-    // Bitmap::SwapOuterInnerAxes(xzyPos); // yxz : xyz -> yxz
-    // Bitmap::SwapOuterInnerAxes(yzxPos); // xzy : 
-
-    // Bitmap::SwapOuterInnerAxes(xyzNeg);
-    // Bitmap::SwapOuterInnerAxes(xzyNeg);
-    // Bitmap::SwapOuterInnerAxes(yzxNeg);
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose("Axis alignment done in ", end - start);
-
-    // for (int i = 14; i < 17; i++) {      
-    //     sLogger.Verbose("Layer: ", i);
-    //     Bitmap::Log3DSlice(yzxPosCulled, i);
-    // }
-
-    // std::vector<uint32_t> faces;
-    // faces.reserve(100);
-
-    // start = std::chrono::high_resolution_clock::now();
-    // for (int i = 0; i < 100000; i++)
-    //     GreedyMeshBitmap(faces, xyzPos, 0);
-    // end = std::chrono::high_resolution_clock::now();
-    // sLogger.Verbose(" --- Greedy meshing done on average in ", (end - start) / 100000);
+    // zyxNegCulled.GreedyMeshBitmap(mesh.m_vertices);
 
     return mesh;
 }
 
-void IChunk::GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const {
-    int n = 0;
-    for (int x = 0; x < 32; x++) {
-        for (int y = 0; y < 32; y++) {
+// void IChunk::GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const {
+//     int n = 0;
+//     for (int x = 0; x < 32; x++) {
+//         for (int y = 0; y < 32; y++) {
 
-            if (bitmap[(x << 5) | y] == 0)
-                continue;
+//             if (bitmap[(x << 5) | y] == 0)
+//                 continue;
 
-            uint16_t index = (x << 5) | y;
-            uint32_t bits = bitmap[index];
+//             uint16_t index = (x << 5) | y;
+//             uint32_t bits = bitmap[index];
 
-            if (bits == 0)
-                continue;
+//             if (bits == 0)
+//                 continue;
             
-            uint8_t z = std::countl_zero(bits);
-            uint8_t height = std::countl_one(bits << z);
-            uint8_t width;
+//             uint8_t z = std::countl_zero(bits);
+//             uint8_t height = std::countl_one(bits << z);
+//             uint8_t width;
 
-            uint32_t mask = bits & (~0 << (32 - z + height));
-            bitmap[index] ^= mask;
+//             uint32_t mask = bits & (~0 << (32 - z + height));
+//             bitmap[index] ^= mask;
 
-            for (width = 1; width < (32 - x); width++) {
-                if ((bitmap[index + width] & mask) != mask)
-                    break;
+//             for (width = 1; width < (32 - x); width++) {
+//                 if ((bitmap[index + width] & mask) != mask)
+//                     break;
 
-                bitmap[index + width] ^= mask;
-            }
+//                 bitmap[index + width] ^= mask;
+//             }
 
-            vertices.push_back((height << 20) | (width << 15) | (x << 10) | (y << 5) | z);
-        }
-    }
-}
+//             vertices.push_back((height << 20) | (width << 15) | (x << 10) | (y << 5) | z);
+//         }
+//     }
+// }
 
 // void IChunk::GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const {
 //     int n = 0;

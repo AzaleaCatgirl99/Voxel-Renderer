@@ -8,11 +8,61 @@
 // ========== SIMD ==========
 
 #include <hwy/highway.h>
+#include "ChunkBitmap.h"
 
 HWY_BEFORE_NAMESPACE();
 
 namespace HWY_NAMESPACE {
 namespace hw = hwy::HWY_NAMESPACE;
+
+
+void GreedyMeshBitmapImpl(uint32_t* bitmap, std::vector<uint32_t>& vertices) {
+    // const hw::ScalableTag<uint32_t> u32Tag;
+// const size_t numLanes = hw::Lanes(u32Tag);
+
+    // std::array<uint32_t, 32> slices;
+    // uint8_t* slicesPtr = reinterpret_cast<uint8_t*>(slices.data());
+
+    // const auto zero = hw::Zero(u32Tag);
+    // const uint32_t laneSize = 1024 / numLanes;
+    // const uint32_t lanesPerSlize = 1024 / 
+    // for (int i = 0; i < laneSize; i++) {
+    //     auto data = hw::Load(u32Tag, bitmap + (i / laneSize));
+    //     auto results = hw::Ne(data, zero);
+    //     hw::StoreMaskBits(u32Tag, results, slicesPtr + laneSize);
+    // }
+
+    int n = 0;
+    for (int x = 0; x < 32; x++) {
+        for (int y = 0; y < 32; y++) {
+
+            if (bitmap[(x << 5) | y] == 0)
+                continue;
+
+            uint16_t index = (x << 5) | y;
+            uint32_t bits = bitmap[index];
+
+            if (bits == 0)
+                continue;
+            
+            uint8_t z = std::countl_zero(bits);
+            uint8_t height = std::countl_one(bits << z);
+            uint8_t width;
+
+            uint32_t mask = bits & (~0 << (32 - z + height));
+            bitmap[index] ^= mask;
+
+            for (width = 1; width < (32 - x); width++) {
+                if ((bitmap[index + width] & mask) != mask)
+                    break;
+
+                bitmap[index + width] ^= mask;
+            }
+
+            vertices.push_back((height << 20) | (width << 15) | (x << 10) | (y << 5) | z);
+        }
+    }
+}
 
 void CullFrontBitsImpl(uint32_t* bitmap) {
     const hw::ScalableTag<uint32_t> u32Tag;
@@ -148,16 +198,6 @@ void InnerTranspose128Impl(uint32_t* bitmap) {
     }
 }
 
-// 0011 OBA
-// 0011 OBA
-// 1100 EAB
-// 1100 EAB
-
-// 0101 OAB
-// 1010 EAB
-// 0101
-// 1010
-
 constexpr void TransposeFour128(uint32_t* bitmap) {
     const hw::FixedTag<uint32_t, 4> u32Tag;
     const hw::FixedTag<uint64_t, 2> u64Tag;
@@ -235,6 +275,10 @@ HWY_AFTER_NAMESPACE();
 // ========== SIMD Wrappers ==========
 
 #if HWY_ONCE
+
+void ChunkBitmap::GreedyMeshBitmap(std::vector<uint32_t>& vertices) {
+    HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl)(m_bitmap.data(), vertices);
+};
 
 ChunkBitmap& ChunkBitmap::CullFrontBits() {
     HWY_STATIC_DISPATCH(CullFrontBitsImpl)(m_bitmap.data());
