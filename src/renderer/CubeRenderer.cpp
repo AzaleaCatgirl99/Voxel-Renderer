@@ -1,31 +1,96 @@
 #include "renderer/CubeRenderer.h"
 
+#include <SDL3/SDL_filesystem.h>
+#include <cstddef>
+#include <cstdio>
 #include <glm/ext.hpp>
+#include <string>
 #include "renderer/Camera.h"
-#include "util/display/buffer/IndexBuffer.h"
-#include "util/display/buffer/UniformBuffer.h"
-#include "util/display/buffer/VertexBuffer.h"
-#include "util/display/pipeline/GraphicsPipeline.h"
+#include "util/display/RenderSystem.h"
+#include "util/display/pipeline/Type.h"
 #include "util/display/pipeline/VertexFormat.h"
 
 const VertexFormat CubeRenderer::sVertexFormat = VertexFormat()
-                            .Element(RENDER_TYPE_VEC3)
-                            .Element(RENDER_TYPE_VEC4);
-// GraphicsPipeline CubeRenderer::sPipeline = GraphicsPipeline("test_vert.spv", "test_frag.spv")
-//                             .PolygonMode(RENDER_POLYGON_MODE_FILL)
-//                             .BlendFunc(RENDER_BLEND_FACTOR_ONE, RENDER_BLEND_FACTOR_DST_COLOR)
-//                             .CullMode(RENDER_CULL_MODE_BACK)
-//                             .Vertex(sVertexFormat, RENDER_VERTEX_MODE_TRIANGLE_LIST)
-//                             .Uniform(0, RENDER_SHADER_STAGE_VERTEX, &sUBO);
-VertexBuffer CubeRenderer::sVBO = VertexBuffer(24, sVertexFormat);
-IndexBuffer CubeRenderer::sIBO = IndexBuffer(36, RENDER_TYPE_UINT16_T);
-UniformBuffer CubeRenderer::sUBO = UniformBuffer(sUniformSize);
+                            .Element(DataType::eVec3)
+                            .Element(DataType::eVec4);
+RenderSystem::Pipeline CubeRenderer::sPipeline;
+vk::DescriptorPool CubeRenderer::sDescPool;
+vk::DescriptorSet CubeRenderer::sDescSets[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+vk::Buffer CubeRenderer::sVBO;
+vk::DeviceMemory CubeRenderer::sVBOMemory;
+vk::Buffer CubeRenderer::sIBO;
+vk::DeviceMemory CubeRenderer::sIBOMemory;
+RenderSystem::UBO CubeRenderer::sUBO;
 
 void CubeRenderer::Initialize() {
-    sUBO.Build();
-    // sPipeline.Build();
-    sVBO.Build();
-    sIBO.Build();
+    sUBO = RenderSystem::CreateUniformBuffer(sUniformSize);
+
+    vk::DynamicState states[2] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+
+    vk::DescriptorSetLayoutBinding bindings[1];
+    bindings[0] = {
+        .binding = 0,
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = 1,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex
+    };
+
+    RenderSystem::Pipeline::Info info = {
+        .vertexShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test_vert.spv",
+        .fragmentShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test_frag.spv",
+        .topology = vk::PrimitiveTopology::eTriangleList,
+        .blending = true,
+        .colorSrcFactor = vk::BlendFactor::eOne,
+        .colorDstFactor = vk::BlendFactor::eDstColor,
+        .alphaSrcFactor = vk::BlendFactor::eOne,
+        .alphaDstFactor = vk::BlendFactor::eDstAlpha,
+        .cullMode = vk::CullModeFlagBits::eBack,
+        .useVertexFormat = true,
+        .vertexFormat = &sVertexFormat,
+        .bindings = bindings,
+        .bindingCount = 1,
+        .dynamicStates = states,
+        .dynamicStateCount = 2
+    };
+
+    sPipeline = RenderSystem::CreatePipeline(info);
+
+    vk::DescriptorPoolSize poolSizes[1];
+    poolSizes[0] = {
+        .type = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = RenderSystem::MAX_FRAMES_IN_FLIGHT
+    };
+
+    sDescPool = RenderSystem::CreateDescriptorPool(poolSizes, 1, RenderSystem::MAX_FRAMES_IN_FLIGHT);
+    vk::DescriptorSetLayout layouts[RenderSystem::MAX_FRAMES_IN_FLIGHT] = {sPipeline.descriptorSetLayout, sPipeline.descriptorSetLayout};
+    RenderSystem::CreateDescriptorSets(sDescSets, RenderSystem::MAX_FRAMES_IN_FLIGHT, sDescPool, layouts);
+
+    vk::WriteDescriptorSet descriptorWrites[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+    vk::DescriptorBufferInfo bufferInfos[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+    for (size_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
+        bufferInfos[i] = {
+            .buffer = sUBO.buffers[i],
+            .offset = 0,
+            .range = sUniformSize
+        };
+
+        descriptorWrites[i] = {
+            .dstSet = sDescSets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eUniformBuffer,
+            .pBufferInfo = &bufferInfos[i]
+        };
+    }
+
+    RenderSystem::GetDevice().updateDescriptorSets(RenderSystem::MAX_FRAMES_IN_FLIGHT, descriptorWrites, 0, VK_NULL_HANDLE);
+
+    sVBO = RenderSystem::CreateVertexBuffer(24, sVertexFormat);
+    sVBOMemory = RenderSystem::CreateMemory(sVBO, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    sIBO = RenderSystem::CreateIndexBuffer(36);
+    sIBOMemory = RenderSystem::CreateMemory(sIBO, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     float begin = -1.0f;
     float end = 1.0f;
@@ -69,6 +134,8 @@ void CubeRenderer::Initialize() {
         begin, begin, end,     1.0f, 0.0f, 1.0f, 1.0f
     };
 
+    RenderSystem::AllocateStagedMemory(sVBO, sVBOMemory, vertices, 168 * sizeof(float));
+
     uint16_t indices[36] = {
         // Front face
         0, 1, 2,
@@ -95,18 +162,23 @@ void CubeRenderer::Initialize() {
         22, 23, 20
     };
 
-    sVBO.Allocate(vertices);
-    sIBO.Allocate(indices);
+    RenderSystem::AllocateStagedMemory(sIBO, sIBOMemory, indices, 36 * sizeof(uint16_t));
 }
 
 void CubeRenderer::Destroy() {
-    sVBO.Delete();
-    sIBO.Delete();
-    sUBO.Delete();
-    // sPipeline.Delete();
+    RenderSystem::GetDevice().freeMemory(sVBOMemory);
+    RenderSystem::GetDevice().freeMemory(sIBOMemory);
+
+    RenderSystem::GetDevice().destroyBuffer(sVBO);
+    RenderSystem::GetDevice().destroyBuffer(sIBO);
+    sUBO.Destroy();
+
+    RenderSystem::GetDevice().destroyDescriptorPool(sDescPool);
+
+    sPipeline.Destroy();
 }
 
-void CubeRenderer::Draw(const Settings& settings) {
+void CubeRenderer::Draw(vk::CommandBuffer* buffer, const Settings& settings) {
     glm::mat4 model(1.0f);
     model = glm::translate(model, settings.m_pos);
     model = glm::rotate(model, glm::radians(settings.m_rot.x), {1.0f, 0.0f, 0.0f});
@@ -123,9 +195,11 @@ void CubeRenderer::Draw(const Settings& settings) {
 
     sUBO.Update(&data);
 
-    // RenderSystem::BindPipeline(sPipeline);
-    RenderSystem::BindVertexBuffer(sVBO);
-    RenderSystem::BindIndexBuffer(sIBO);
+    buffer->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, sPipeline.layout, 0, 1, &sDescSets[RenderSystem::GetCurrentFrame()], 0, VK_NULL_HANDLE);
+    buffer->bindPipeline(vk::PipelineBindPoint::eGraphics, sPipeline);
+    vk::DeviceSize offset = 0;
+    buffer->bindVertexBuffers(0, 1, &sVBO, &offset);
+    buffer->bindIndexBuffer(sIBO, 0, vk::IndexType::eUint16);
 
-    RenderSystem::DrawIndexed(36, 1);
+    buffer->drawIndexed(36, 1, 0, 0, 0);
 }

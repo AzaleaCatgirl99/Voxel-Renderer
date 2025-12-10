@@ -1,45 +1,45 @@
 #include "util/display/pipeline/Type.h"
 #include <cstdint>
 
-const size_t GetRenderTypeCount(eRenderType type) {
+const size_t GetDataTypeCount(DataType type) {
     switch (type) {
-    case RENDER_TYPE_VEC2:
+    case DataType::eVec2:
         return 2;
-    case RENDER_TYPE_VEC3:
+    case DataType::eVec3:
         return 3;
-    case RENDER_TYPE_VEC4:
+    case DataType::eVec4:
         return 4;
-    case RENDER_TYPE_MAT2:
+    case DataType::eMat2:
         return 2 * 2;
-    case RENDER_TYPE_MAT3:
+    case DataType::eMat3:
         return 3 * 3;
-    case RENDER_TYPE_MAT4:
+    case DataType::eMat4:
         return 4 * 4;
     default:
         return 1;
     }
 }
 
-const size_t GetRenderTypeSize(eRenderType type) {
+const size_t GetDataTypeSize(DataType type) {
     switch (type) {
-    case RENDER_TYPE_VEC2:
-    case RENDER_TYPE_VEC3:
-    case RENDER_TYPE_VEC4:
-    case RENDER_TYPE_MAT2:
-    case RENDER_TYPE_MAT3:
-    case RENDER_TYPE_MAT4:
-        return sizeof(float) * GetRenderTypeCount(type);
-    case RENDER_TYPE_FLOAT:
+    case DataType::eVec2:
+    case DataType::eVec3:
+    case DataType::eVec4:
+    case DataType::eMat2:
+    case DataType::eMat3:
+    case DataType::eMat4:
+        return sizeof(float) * GetDataTypeCount(type);
+    case DataType::eFloat:
         return sizeof(float);
-    case RENDER_TYPE_DOUBLE:
+    case DataType::eDouble:
         return sizeof(double);
-    case RENDER_TYPE_INT:
+    case DataType::eInt:
         return sizeof(int);
-    case RENDER_TYPE_UINT:
+    case DataType::eUint:
         return sizeof(unsigned int);
-    case RENDER_TYPE_INT16_T:
+    case DataType::eInt16:
         return sizeof(int16_t);
-    case RENDER_TYPE_UINT16_T:
+    case DataType::eUint16:
         return sizeof(uint16_t);
     }
 }

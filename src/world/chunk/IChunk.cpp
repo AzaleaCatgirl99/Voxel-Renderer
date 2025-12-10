@@ -2,7 +2,6 @@
 
 #include <bit>
 #include <util/Bitmap.h>
-#include <chrono>
 #include "world/chunk/ChunkBitmap.h"
 
 Logger IChunk::sLogger = Logger("Chunk");
@@ -15,7 +14,7 @@ void IChunk::Initialize(ChunkPacking packingType) {
     uint32_t maxSize = 1 << static_cast<uint8_t>(packingType); // Identify the number of values that can be represented with the packing type.
     m_blockPalette.Reserve(maxSize);
 
-    m_blockPalette.Insert(BlockTypes::Air);
+    m_blockPalette.Insert(BlockTypes::eAir);
     m_blockPaletteIndices[0] = 0;
     m_blockPaletteCounts[0] = 32768;
 }
@@ -69,7 +68,7 @@ ChunkMesh::Naive IChunk::MeshNaive() {
 
 ChunkMesh::Greedy IChunk::MeshGreedy() {
     // Temporary variables for the three axis views. Do not use after culling.
-    ChunkBitmap xyz = GetBlockBitmap(BlockTypes::Air, true);
+    ChunkBitmap xyz = GetBlockBitmap(BlockTypes::eAir, true);
     ChunkBitmap yxz = xyz.Copy().OuterTranspose();
     ChunkBitmap xzy = xyz.Copy().InnerTranspose();
     ChunkBitmap yzx = yxz.Copy().InnerTranspose();

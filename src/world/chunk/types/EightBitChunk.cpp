@@ -1,7 +1,6 @@
-#include <iomanip>
-#include <bit>
-#include <cstring>
 #include "world/chunk/types/EightBitChunk.h"
+
+#include <cstring>
 
 // ========== SIMD ==========
 

@@ -121,7 +121,7 @@ static void Test() {
     ChunkBitmap xyzTest;
 
     for (int i = 0; i < 100000; i++) {
-        xyzTest = chunk.GetBlockBitmap(BlockTypes::Air, true);
+        xyzTest = chunk.GetBlockBitmap(BlockTypes::eAir, true);
     }
     end = std::chrono::high_resolution_clock::now();
     log.Verbose("Air bit map created! Average time taken: ", (end - start) / 100000);

@@ -11,9 +11,9 @@ public:
 
     // Efficient load data functions TODO.
 // protected:
-    inline uint16_t RawGetBlock(const uint16_t index) const override;
+    uint16_t RawGetBlock(const uint16_t index) const override;
 
-    inline void RawSetBlock(const uint16_t index, const uint16_t newBlock) override;
+    void RawSetBlock(const uint16_t index, const uint16_t newBlock) override;
 
     ChunkBitmap GetBlockBitmap(const BlockTypes block, const bool invert = false) const override;
 private:

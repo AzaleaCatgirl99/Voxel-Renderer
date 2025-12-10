@@ -92,7 +92,6 @@ void Camera::Update() {
             sPosition.y -= GetSpeed();
 
         sView = glm::lookAt(sPosition, sPosition + sTarget, sUp);
-        // sView[1][1] *= -1;
     }
 }
 

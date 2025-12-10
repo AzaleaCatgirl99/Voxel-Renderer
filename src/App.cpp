@@ -4,7 +4,6 @@
 #include "renderer/CubeRenderer.h"
 #include "util/ImGUIHelper.h"
 #include "util/display/RenderSystem.h"
-#include "util/Constants.h"
 #include "util/display/Window.h"
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
@@ -17,14 +16,14 @@ float App::sDeltaTime = 0.0f;
 float App::sLastFrame = 0.0f;
 
 void App::Run() {
-    Test();
-    
-    // Init();
+    // Test();
 
-    // while (sRunning)
-    //     MainLoop();
+    Init();
 
-    // Cleanup();
+    while (sRunning)
+        MainLoop();
+
+    Cleanup();
 }
 
 void App::Init() {
@@ -35,10 +34,11 @@ void App::Init() {
 		.m_minHeight = 580
     };
 
-    Window::Create("Voxel Renderer", mode, RENDER_PIPELINE_VULKAN);
+    Window::Create("Voxel Renderer", mode);
 
     RenderSystem::Settings rendererSettings = {
-        .m_swapInterval = RENDER_SWAP_INTERVAL_VSYNC,
+        .swapInterval = RenderSystem::SwapInterval::eVSync,
+        .cmdCallback = RenderLoop
     };
     RenderSystem::Initialize(rendererSettings);
 
@@ -68,17 +68,19 @@ void App::MainLoop() {
 
     Camera::Update();
 
+    RenderSystem::UpdateDisplay();
+}
+
+void App::RenderLoop(vk::CommandBuffer* buffer) {
     CubeRenderer::Settings cube = {
         .m_pos = {8.0f, 0.0f, 0.0f},
         .m_rot = {0.0f, -90.0f, 0.0f}
     };
-    CubeRenderer::Draw(cube);
-
-    RenderSystem::UpdateDisplay();
+    CubeRenderer::Draw(buffer, cube);
 }
 
 void App::Cleanup() {
-    RenderSystem::WaitForDeviceIdle();
+    RenderSystem::GetDevice().waitIdle();
 
     // ImGUIHelper::Destroy();
 

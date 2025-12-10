@@ -4,37 +4,36 @@
 #include <glm/glm.hpp>
 
 // Camera utility.
-
 class Camera final {
 public:
     static void Update();
     static void TickEvents();
 
-    static constexpr const glm::mat4 GetProj() noexcept {
+    static VXL_INLINE const glm::mat4 GetProj() noexcept {
         return sProjection;
     }
 
-    static constexpr const glm::mat4 GetView() noexcept {
+    static VXL_INLINE const glm::mat4 GetView() noexcept {
         return sView;
     }
 
-    static constexpr const glm::vec3 GetTarget() noexcept {
+    static VXL_INLINE const glm::vec3 GetTarget() noexcept {
         return sTarget;
     }
 
-    static constexpr const glm::vec3 GetPos() noexcept {
+    static VXL_INLINE const glm::vec3 GetPos() noexcept {
         return sPosition;
     }
 
-    static constexpr float GetFOV() noexcept {
+    static VXL_INLINE float GetFOV() noexcept {
         return sFOV;
     }
 
-    static constexpr const float GetSpeed() noexcept {
+    static VXL_INLINE const float GetSpeed() noexcept {
         return sSpeed * App::DeltaTime();
     }
 
-    static constexpr const float GetSensitivity() noexcept {
+    static VXL_INLINE const float GetSensitivity() noexcept {
         return sSensitivity * App::DeltaTime();
     }
 private:
