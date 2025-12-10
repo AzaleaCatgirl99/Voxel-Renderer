@@ -1,13 +1,15 @@
 #pragma once
 
+#include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_vulkan.h>
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.h>
-#include "util/Constants.h"
+// Makes sure to remove constructors for structs.
+#define VULKAN_HPP_NO_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
 #include "util/Logger.h"
 
 // Struct for toggling default display features.
@@ -26,7 +28,7 @@ struct DisplayMode final {
 // Utility for handling window management.
 class Window final {
 public:
-    static void Create(const char* title, const DisplayMode& mode, eRenderPipeline pipeline);
+    static void Create(const char* title, const DisplayMode& mode);
 
     // Gets the window width.
     static constexpr const int Width() {
@@ -60,11 +62,6 @@ public:
     // Gets the window's aspect ratio.
     static constexpr const float ApsectRatio() {
         return (float)Width() / (float)Height();
-    }
-
-    // Gets the render pipeline for the window.
-    static constexpr const eRenderPipeline& Pipeline() noexcept {
-        return sPipeline;
     }
 
     // Sets the window to fullscreen.
@@ -144,8 +141,17 @@ public:
     }
 
     // Creates a Vulkan window surface.
-    static constexpr bool CreateSurface(VkInstance instance, VkSurfaceKHR surface) {
-        return SDL_Vulkan_CreateSurface(sContext, instance, VK_NULL_HANDLE, &surface);
+    static constexpr vk::SurfaceKHR CreateSurface(vk::Instance& instance) {
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+        if (!SDL_Vulkan_CreateSurface(sContext, instance, VK_NULL_HANDLE, &surface))
+            throw sLogger.RuntimeError("Failed to create window surface! ", SDL_GetError());
+
+        return surface;
+    }
+
+    // Destroys a Vulkan window surface.
+    static constexpr void DestroySurface(vk::Instance& instance, vk::SurfaceKHR& surface) {
+        SDL_Vulkan_DestroySurface(instance, surface, VK_NULL_HANDLE);
     }
 
     // Gets the SDL window context.
@@ -154,7 +160,7 @@ public:
     }
 
     // Checks if the window is minimized.
-    static constexpr bool IsMinimized() noexcept {
+    static constexpr const bool IsMinimized() noexcept {
         return sMinimized;
     }
 private:
@@ -165,7 +171,6 @@ private:
 
     static SDL_Window* sContext;
     static SDL_Event sEvent;
-    static eRenderPipeline sPipeline;
     static Logger sLogger;
     static bool sMinimized;
 };

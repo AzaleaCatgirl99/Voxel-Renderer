@@ -15,11 +15,11 @@ set(CMAKE_CXX_STANDARD 23)
 add_compile_options(-march=native)
 
 # Default settings for the program
-set(VOXEL_RENDERER_VERBOSE_LOG OFF)
-set(VOXEL_RENDERER_INFO_LOG OFF)
-set(VOXEL_RENDERER_WARNING_LOG ON)
-set(VOXEL_RENDERER_ERROR_LOG ON)
-set(VOXEL_FORCE_USE_DEBUG_SETTINGS OFF)
+set(VXL_VERBOSE_LOGGING OFF)
+set(VXL_INFO_LOGGING ON)
+set(VXL_WARNING_LOGGING ON)
+set(VXL_ERROR_LOGGING ON)
+set(VXL_PROJECT_NAME "Voxel Renderer")
 
 # Custom config settings to enable
 if (EXISTS config/config.cmake)
@@ -27,25 +27,23 @@ if (EXISTS config/config.cmake)
 endif ()
 
 # Custom macros used
-if (VOXEL_RENDERER_VERBOSE_LOG)
-    add_compile_definitions(INTERNAL_VXL_RENDERER_VERBOSE_LOG=1)
+if (VXL_VERBOSE_LOGGING)
+    add_compile_definitions(VXL_VERBOSE_LOGGING=1)
 endif ()
 
-if (VOXEL_RENDERER_INFO_LOG)
-    add_compile_definitions(INTERNAL_VXL_RENDERER_INFO_LOG=1)
+if (VXL_INFO_LOGGING)
+    add_compile_definitions(VXL_INFO_LOGGING=1)
 endif ()
 
-if (VOXEL_RENDERER_WARNING_LOG)
-    add_compile_definitions(INTERNAL_VXL_RENDERER_WARNING_LOG=1)
+if (VXL_WARNING_LOGGING)
+    add_compile_definitions(VXL_WARNING_LOGGING=1)
 endif ()
 
-if (VOXEL_RENDERER_ERROR_LOG)
-    add_compile_definitions(INTERNAL_VXL_RENDERER_ERROR_LOG=1)
+if (VXL_ERROR_LOGGING)
+    add_compile_definitions(VXL_ERROR_LOGGING=1)
 endif ()
 
-if (VOXEL_FORCE_USE_DEBUG_SETTINGS)
-    add_compile_definitions(INTERNAL_VXL_FORCE_USE_DEBUG_SETTINGS=1)
-endif ()
+add_compile_definitions(VXL_PROJECT_NAME="Voxel Renderer")
 
 # ========== Source Files & Executable ==========
 
@@ -70,6 +68,19 @@ set(IMGUI_SRC
 add_executable(Voxel-Renderer ${SRC} ${IMGUI_SRC})
 include_directories(src)
 include_directories(lib/imgui)
+
+# Custom definitions based on specific CMake settings
+target_compile_definitions(Voxel-Renderer PUBLIC
+    # Build type
+    $<$<CONFIG:Debug>:VXL_DEBUG=1>
+    $<$<CONFIG:RelWithDebInfo>:VXL_DEBUG=1>
+    $<$<CONFIG:Release>:VXL_RELEASE=1>
+    $<$<CONFIG:MinSizeRel>:VXL_RELEASE=1>
+
+    # Debugging
+    $<$<CONFIG:Debug>:VXL_RENDERSYSTEM_DEBUG=1>
+    $<$<CONFIG:RelWithDebInfo>:VXL_RENDERSYSTEM_DEBUG=1>
+)
 
 # ========== Libraries ==========
 

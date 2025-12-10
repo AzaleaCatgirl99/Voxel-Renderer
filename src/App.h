@@ -1,5 +1,9 @@
 #pragma once
 
+// Makes sure to remove constructors for structs.
+#define VULKAN_HPP_NO_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
+
 class Renderer;
 
 // App utility.
@@ -21,5 +25,6 @@ private:
 
     static void Init();
     static void MainLoop();
+    static void RenderLoop(vk::CommandBuffer* buffer);
     static void Cleanup();
 };

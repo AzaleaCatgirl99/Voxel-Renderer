@@ -4,7 +4,6 @@
 #include <glm/glm.hpp>
 
 // Camera utility.
-
 class Camera final {
 public:
     static void Update();

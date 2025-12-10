@@ -7,25 +7,15 @@
 SDL_Window* Window::sContext = nullptr;
 Logger Window::sLogger = Logger("Window");
 SDL_Event Window::sEvent;
-eRenderPipeline Window::sPipeline;
 bool Window::sMinimized = false;
 
-void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline pipeline) {
-    sPipeline = pipeline;
-
+void Window::Create(const char* title, const DisplayMode& mode) {
     // Initializes the the SDL3 video system, which is required for window management.
 	if (!SDL_Init(SDL_INIT_VIDEO))
         throw sLogger.RuntimeError("Failed to initialize SDL Video.");
 
     // SDL flags for use in the window.
-    SDL_WindowFlags flags;
-
-    // Sets the flag for the correct rendering pipeline.
-    switch (pipeline) {
-    case RENDER_PIPELINE_VULKAN:
-        flags = SDL_WINDOW_VULKAN;
-        break;
-    }
+    SDL_WindowFlags flags = SDL_WINDOW_VULKAN;
 
     // If fullscreen is enabled, adds the fullscreen flag.
     if (mode.m_fullscreen)
@@ -56,7 +46,7 @@ void Window::Create(const char* title, const DisplayMode& mode, eRenderPipeline 
 
 bool Window::EventWatcher(void* app_data, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_EXPOSED)
-        RenderSystem::RecreateSwapChain();
+        RenderSystem::RecreateSwapchain();
 
     if (event->type == SDL_EVENT_WINDOW_MINIMIZED)
         sMinimized = true;

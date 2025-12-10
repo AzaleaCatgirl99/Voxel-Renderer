@@ -1,13 +1,13 @@
 #pragma once
 
 #include "util/data/Std140Calc.h"
+#include "util/display/RenderSystem.h"
 #include <glm/glm.hpp>
+// Makes sure to remove constructors for structs.
+#define VULKAN_HPP_NO_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
 
 class VertexFormat;
-class GraphicsPipeline;
-class VertexBuffer;
-class IndexBuffer;
-class UniformBuffer;
 
 // Class for testing rendering individual cubes.
 class CubeRenderer final {
@@ -20,7 +20,7 @@ public:
 
     static void Initialize();
     static void Destroy();
-    static void Draw(const Settings& settings);
+    static void Draw(vk::CommandBuffer* buffer, const Settings& settings);
 private:
     struct ModelData {
         glm::mat4 m_model;
@@ -30,8 +30,12 @@ private:
 
     static const VertexFormat sVertexFormat;
     static constexpr const uint32_t sUniformSize = Std140Calc().PutMat4().PutMat4().PutMat4().Get();
-    // static GraphicsPipeline sPipeline;
-    static VertexBuffer sVBO;
-    static IndexBuffer sIBO;
-    static UniformBuffer sUBO;
+    static RenderSystem::Pipeline sPipeline;
+    static vk::DescriptorPool sDescPool;
+    static vk::DescriptorSet sDescSets[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+    static vk::Buffer sVBO;
+    static vk::DeviceMemory sVBOMemory;
+    static vk::Buffer sIBO;
+    static vk::DeviceMemory sIBOMemory;
+    static RenderSystem::UBO sUBO;
 };

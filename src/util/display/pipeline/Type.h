@@ -3,21 +3,21 @@
 #include <cstddef>
 
 // Various different types.
-enum eRenderType {
-    RENDER_TYPE_VEC2,
-    RENDER_TYPE_VEC3,
-    RENDER_TYPE_VEC4,
-    RENDER_TYPE_MAT2,
-    RENDER_TYPE_MAT3,
-    RENDER_TYPE_MAT4,
-    RENDER_TYPE_FLOAT,
-    RENDER_TYPE_DOUBLE,
-    RENDER_TYPE_INT,
-    RENDER_TYPE_UINT,
-    RENDER_TYPE_INT16_T,
-    RENDER_TYPE_UINT16_T
+enum class DataType {
+    eVec2,
+    eVec3,
+    eVec4,
+    eMat2,
+    eMat3,
+    eMat4,
+    eFloat,
+    eDouble,
+    eInt,
+    eUint,
+    eInt16,
+    eUint16
 };
 
-const size_t GetRenderTypeCount(eRenderType type);
+const size_t GetDataTypeCount(DataType type);
 
-const size_t GetRenderTypeSize(eRenderType type);
+const size_t GetDataTypeSize(DataType type);

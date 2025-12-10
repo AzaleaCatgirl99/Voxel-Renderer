@@ -3,10 +3,13 @@
 #include "util/Logger.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <vector>
-#include <vulkan/vulkan.h>
+// Makes sure to remove constructors for structs.
+#define VULKAN_HPP_NO_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_beta.h>
 #include <SDL3/SDL_platform_defines.h>
 
@@ -26,50 +29,66 @@ public:
     };
 
     struct QueueFamilyIndices {
-        std::optional<uint32_t> m_graphics;
-        std::optional<uint32_t> m_present;
-        std::optional<uint32_t> m_transfer;
+        std::optional<uint32_t> graphics;
+        std::optional<uint32_t> present;
+        std::optional<uint32_t> transfer;
 
         constexpr const bool IsFull() const noexcept {
-            return m_graphics.has_value() && m_present.has_value() && m_transfer.has_value();
+            return graphics.has_value() && present.has_value() && transfer.has_value();
         }
+
+        constexpr const bool IsSame() const noexcept {
+            return m_uniques.size() == 1;
+        }
+
+        constexpr const size_t UniqueSize() const noexcept {
+            return m_uniques.size();
+        }
+
+        constexpr const uint32_t GetUnique(size_t i) const noexcept {
+            return m_data.at(i);
+        }
+
+        constexpr const uint32_t* Data() const noexcept {
+            return m_data.data();
+        }
+    private:
+        friend GPUDevice;
+
+        std::set<uint32_t> m_uniques;
+        std::vector<uint32_t> m_data;
     };
 
-    struct SwapChainSupportDetails {
-        VkSurfaceCapabilitiesKHR m_capabilities;
-        std::vector<VkSurfaceFormatKHR> m_formats;
-        std::vector<VkPresentModeKHR> m_presentModes;
+    struct SwapchainSupportDetails {
+        vk::SurfaceCapabilitiesKHR capabilities;
+        std::vector<vk::SurfaceFormatKHR> formats;
+        std::vector<vk::PresentModeKHR> presentModes;
     };
 
-    constexpr GPUDevice(VkInstance instance, VkSurfaceKHR surface) {
-        m_instance = instance;
-        m_surface = surface;
+    void Build(vk::Instance& instance, vk::SurfaceKHR& surface);
+
+    constexpr operator vk::PhysicalDevice() noexcept {
+        return device;
     }
 
-    void Build();
-
-    constexpr operator VkPhysicalDevice() noexcept {
-        return m_context;
-    }
-
-    constexpr const VkPhysicalDeviceProperties GetProperties() const noexcept {
+    constexpr const vk::PhysicalDeviceProperties GetProperties() const noexcept {
         return m_properties;
     }
 
-    constexpr const VkPhysicalDeviceFeatures GetFeatures() const noexcept {
+    constexpr const vk::PhysicalDeviceFeatures GetFeatures() const noexcept {
         return m_features;
     }
 
-    constexpr const VkPhysicalDeviceMemoryProperties GetMemoryProperties() const noexcept {
+    constexpr const vk::PhysicalDeviceMemoryProperties GetMemoryProperties() const noexcept {
         return m_memoryProperties;
     }
 
-    constexpr const QueueFamilyIndices GetQueueFamilies() const noexcept {
-        return m_queueFamilyIndices;
+    constexpr const QueueFamilyIndices* GetQueueFamilies() const noexcept {
+        return &m_queueFamilyIndices;
     }
 
-    constexpr const SwapChainSupportDetails GetSwapChainSupport() const noexcept {
-        return m_swapChainSupport;
+    constexpr const SwapchainSupportDetails GetSwapchainSupport() const noexcept {
+        return m_swapchainSupport;
     }
 
     constexpr const bool IsExtensionSupported(const char* extension) const {
@@ -79,31 +98,29 @@ public:
         return false;
     }
 
-    constexpr uint32_t FindMemoryType(uint32_t filter, VkMemoryPropertyFlags properties) {
+    constexpr uint32_t FindMemoryType(uint32_t filter, vk::MemoryPropertyFlags properties) {
         for (uint32_t i = 0; i < m_memoryProperties.memoryTypeCount; i++)
             if (filter & (1 << i) && (m_memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
                 return i;
 
         throw sLogger.RuntimeError("Failed to find suitable memory type!");
     }
+
+    vk::PhysicalDevice device;
 private:
     static Logger sLogger;
 
-    bool IsGPUUsable(VkPhysicalDevice gpu);
-    bool CheckGPUExtensionSupport(VkPhysicalDevice gpu);
-    void CreateQueueFamilyIndices();
-    void GetSwapChainSupport(VkPhysicalDevice gpu);
-    size_t GetGPUScore(VkPhysicalDevice gpu);
+    bool IsGPUUsable(vk::PhysicalDevice& gpu, vk::Instance& instance, vk::SurfaceKHR& surface);
+    bool CheckGPUExtensionSupport(vk::PhysicalDevice& gpu);
+    void CreateQueueFamilyIndices(vk::PhysicalDevice& gpu, vk::Instance& instance);
+    void GetSwapchainSupport(vk::PhysicalDevice& gpu, vk::SurfaceKHR& surface);
+    size_t GetGPUScore(vk::PhysicalDevice& gpu);
 
-    VkInstance m_instance = VK_NULL_HANDLE;
-    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
-    VkPhysicalDevice m_context = VK_NULL_HANDLE;
-    VkPhysicalDeviceProperties m_properties;
-    VkPhysicalDeviceFeatures m_features;
-    VkPhysicalDeviceMemoryProperties m_memoryProperties;
+    vk::PhysicalDeviceProperties m_properties;
+    vk::PhysicalDeviceFeatures m_features;
+    vk::PhysicalDeviceMemoryProperties m_memoryProperties;
     std::set<const char*> m_supportedExtensions;
     QueueFamilyIndices m_queueFamilyIndices;
-    uint32_t m_queueFamilyPropertiesSize = 0;
-    VkQueueFamilyProperties* m_queueFamilyProperties = nullptr;
-    SwapChainSupportDetails m_swapChainSupport;
+    std::vector<vk::QueueFamilyProperties> m_queueFamilyProperties;
+    SwapchainSupportDetails m_swapchainSupport;
 };
