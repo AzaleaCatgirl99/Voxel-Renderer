@@ -3,7 +3,7 @@
 #include <cstdint>
 
 enum BlockTypes : uint16_t {
-    Air = 0,
-    Dirt = 1,
-    Grass = 2
+    eAir = 0,
+    eDirt = 1,
+    eGrass = 2
 };

@@ -23,7 +23,13 @@ RenderSystem::Settings RenderSystem::sSettings;
 
 GPUDevice RenderSystem::sGPU;
 
-VkDeviceHandler RenderSystem::sDevice;
+// Logical Device variables.
+vk::Device RenderSystem::sDevice;
+vk::Queue RenderSystem::sGraphicsQueue;
+vk::Queue RenderSystem::sPresentQueue;
+vk::Queue RenderSystem::sTransferQueue;
+vk::CommandPool RenderSystem::sGraphicsCmdPool;
+vk::CommandPool RenderSystem::sTransferCmdPool;
 
 vk::Instance RenderSystem::sInstance;
 #ifdef VXL_RENDERSYSTEM_DEBUG
@@ -64,7 +70,7 @@ void RenderSystem::Initialize(const Settings& settings) {
 #endif
     sSurface = Window::CreateSurface(sInstance);
     sGPU.Build(sInstance, sSurface);
-    sDevice.Build(&sInstance, &sGPU);
+    CreateDevice();
     SwapchainHandler::Build(sDevice, &sGPU, sSurface, GetPresentMode(sSettings.swapInterval));
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -77,21 +83,24 @@ void RenderSystem::Initialize(const Settings& settings) {
 
 void RenderSystem::Destroy() {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        sDevice.device.destroySemaphore(sImageAvailableSemaphores[i]);
-        sDevice.device.destroyFence(sInFlightFences[i]);
+        sDevice.destroySemaphore(sImageAvailableSemaphores[i]);
+        sDevice.destroyFence(sInFlightFences[i]);
     }
 
     for (vk::Semaphore& semaphore : sRenderFinishedSemaphores)
-        sDevice.device.destroySemaphore(semaphore);
+        sDevice.destroySemaphore(semaphore);
 
     for (auto framebuffer : sFramebuffers)
-        sDevice.device.destroyFramebuffer(framebuffer);
+        sDevice.destroyFramebuffer(framebuffer);
 
-    sDevice.device.destroyRenderPass(sRenderPass);
+    sDevice.destroyRenderPass(sRenderPass);
 
     SwapchainHandler::Delete(sDevice);
 
-    sDevice.Delete();
+    sDevice.destroyCommandPool(sGraphicsCmdPool);
+    sDevice.destroyCommandPool(sTransferCmdPool);
+
+    sDevice.destroy();
 
     Window::DestroySurface(sInstance, sSurface);
 
@@ -106,10 +115,10 @@ void RenderSystem::RecreateSwapchain() {
     if (Window::IsMinimized())
         return;
 
-    sDevice.device.waitIdle();
+    sDevice.waitIdle();
 
     for (auto framebuffer : sFramebuffers)
-        sDevice.device.destroyFramebuffer(framebuffer);
+        sDevice.destroyFramebuffer(framebuffer);
 
     SwapchainHandler::Rebuild(sDevice, &sGPU, sSurface, GetPresentMode(sSettings.swapInterval));
 
@@ -117,14 +126,14 @@ void RenderSystem::RecreateSwapchain() {
 }
 
 void RenderSystem::UpdateDisplay() {
-    vk::Result result = sDevice.device.waitForFences(1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
-    result = sDevice.device.resetFences(1, &sInFlightFences[sCurrentFrame]);
+    vk::Result result = sDevice.waitForFences(1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
+    result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
 
-    auto index = sDevice.device.acquireNextImageKHR(SwapchainHandler::sSwapchain, 0, sImageAvailableSemaphores[sCurrentFrame]);
+    auto index = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, 0, sImageAvailableSemaphores[sCurrentFrame]);
     VkResultHandler::CheckResult(index.result, "Failed to get image index!");
     sImageIndex = index.value;
 
-    result = sDevice.device.resetFences(1, &sInFlightFences[sCurrentFrame]);
+    result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
 
     sCommandBuffers[sCurrentFrame].reset();
     BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
@@ -146,7 +155,7 @@ void RenderSystem::UpdateDisplay() {
         .pSignalSemaphores = &sRenderFinishedSemaphores[sImageIndex]
     };
 
-    result = sDevice.graphicsQueue.submit(1, &submitInfo, sInFlightFences[sCurrentFrame]);
+    result = sGraphicsQueue.submit(1, &submitInfo, sInFlightFences[sCurrentFrame]);
     VkResultHandler::CheckResult(result, "Failed to submit command buffer!");
 
     vk::PresentInfoKHR presentInfo = {
@@ -158,7 +167,7 @@ void RenderSystem::UpdateDisplay() {
         .pResults = VK_NULL_HANDLE
     };
 
-    result = sDevice.presentQueue.presentKHR(&presentInfo);
+    result = sPresentQueue.presentKHR(&presentInfo);
     VkResultHandler::CheckResult(result, "Failed to present to the present queue!");
 
     // Advance to the next frame.
@@ -167,13 +176,13 @@ void RenderSystem::UpdateDisplay() {
 
 std::vector<vk::CommandBuffer> RenderSystem::CreateCmdBuffers(uint32_t count, std::optional<vk::CommandPool> pool) {
     vk::CommandBufferAllocateInfo info = {
-        .commandPool = pool.has_value() ? pool.value() : sDevice.graphicsCmdPool,
+        .commandPool = pool.has_value() ? pool.value() : sGraphicsCmdPool,
         .level = vk::CommandBufferLevel::ePrimary,
         .commandBufferCount = count
     };
 
     // Annoyingly HPP won't allow the use of just normal pointers for data.
-    return sDevice.device.allocateCommandBuffers(info);
+    return sDevice.allocateCommandBuffers(info);
 }
 
 vk::CommandBuffer RenderSystem::CreateCmdBuffer(std::optional<vk::CommandPool> pool) {
@@ -182,17 +191,17 @@ vk::CommandBuffer RenderSystem::CreateCmdBuffer(std::optional<vk::CommandPool> p
 
     VkCommandBufferAllocateInfo info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = pool.has_value() ? pool.value() : sDevice.graphicsCmdPool,
+        .commandPool = pool.has_value() ? pool.value() : sGraphicsCmdPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1
     };
 
-    vkAllocateCommandBuffers(sDevice.device, &info, &buffer);
+    vkAllocateCommandBuffers(sDevice, &info, &buffer);
     return buffer;
 }
 
 vk::CommandBuffer RenderSystem::BeginDataTransfer() {
-    vk::CommandBuffer buffer = CreateCmdBuffer(sDevice.transferCmdPool);
+    vk::CommandBuffer buffer = CreateCmdBuffer(sTransferCmdPool);
 
     vk::CommandBufferBeginInfo info = {
         .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
@@ -210,10 +219,10 @@ void RenderSystem::EndDataTransfer(vk::CommandBuffer& buffer) {
         .pCommandBuffers = &buffer
     };
 
-    vk::Result result = sDevice.transferQueue.submit(1, &info, VK_NULL_HANDLE);
-    sDevice.transferQueue.waitIdle();
+    vk::Result result = sTransferQueue.submit(1, &info, VK_NULL_HANDLE);
+    sTransferQueue.waitIdle();
 
-    sDevice.device.freeCommandBuffers(sDevice.transferCmdPool, 1, &buffer);
+    sDevice.freeCommandBuffers(sTransferCmdPool, 1, &buffer);
 }
 
 vk::Buffer RenderSystem::CreateBuffer(vk::SharingMode mode, uint32_t size, vk::BufferCreateFlags flags, vk::BufferUsageFlags usages) {
@@ -224,7 +233,7 @@ vk::Buffer RenderSystem::CreateBuffer(vk::SharingMode mode, uint32_t size, vk::B
         .sharingMode = mode
     };
 
-    return sDevice.device.createBuffer(info);
+    return sDevice.createBuffer(info);
 }
 
 vk::Buffer RenderSystem::CreateVertexBuffer(vk::DeviceSize size, const VertexFormat format) {
@@ -263,14 +272,14 @@ RenderSystem::UBO RenderSystem::CreateUniformBuffer(vk::DeviceSize size) {
 }
 
 vk::DeviceMemory RenderSystem::CreateMemory(vk::Buffer& buffer, vk::MemoryPropertyFlags properties, bool bind) {
-    vk::MemoryRequirements memoryRequirements = sDevice.device.getBufferMemoryRequirements(buffer);
+    vk::MemoryRequirements memoryRequirements = sDevice.getBufferMemoryRequirements(buffer);
 
     vk::MemoryAllocateInfo info = {
         .allocationSize = memoryRequirements.size,
         .memoryTypeIndex = sGPU.FindMemoryType(memoryRequirements.memoryTypeBits, properties)
     };
 
-    vk::DeviceMemory memory = sDevice.device.allocateMemory(info);
+    vk::DeviceMemory memory = sDevice.allocateMemory(info);
     if (bind)
         BindMemory(buffer, memory);
 
@@ -288,8 +297,8 @@ void RenderSystem::AllocateStagedMemory(vk::Buffer& buffer, vk::DeviceMemory& me
     AllocateMemory(stagingMemory, data, size);
     CopyBuffer(buffer, stagingBuffer, size);
 
-    sDevice.device.freeMemory(stagingMemory);
-    sDevice.device.destroyBuffer(stagingBuffer);
+    sDevice.freeMemory(stagingMemory);
+    sDevice.destroyBuffer(stagingBuffer);
 }
 
 void RenderSystem::CopyBuffer(vk::Buffer& dst, vk::Buffer& src, vk::DeviceSize size, vk::DeviceSize src_offset, vk::DeviceSize dst_offset) {
@@ -418,7 +427,7 @@ RenderSystem::Pipeline RenderSystem::CreatePipeline(Pipeline::Info& info) {
             .pBindings = info.bindings
         };
 
-        pipeline.descriptorSetLayout =  sDevice.device.createDescriptorSetLayout(layoutInfo);
+        pipeline.descriptorSetLayout =  sDevice.createDescriptorSetLayout(layoutInfo);
     }
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {
@@ -428,7 +437,7 @@ RenderSystem::Pipeline RenderSystem::CreatePipeline(Pipeline::Info& info) {
         .pPushConstantRanges = VK_NULL_HANDLE
     };
 
-    pipeline.layout = sDevice.device.createPipelineLayout(pipelineLayoutInfo);
+    pipeline.layout = sDevice.createPipelineLayout(pipelineLayoutInfo);
 
     vk::PipelineRasterizationStateCreateInfo rasterizerInfo = {
         .depthClampEnable = VK_FALSE, // Discard off-screen fragments, do not clamp.
@@ -461,12 +470,12 @@ RenderSystem::Pipeline RenderSystem::CreatePipeline(Pipeline::Info& info) {
         .basePipelineIndex = -1
     };
 
-    auto res = sDevice.device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
+    auto res = sDevice.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
     VkResultHandler::CheckResult(res.result, "Failed to create graphics pipeline!");
     pipeline.pipeline = res.value;
 
-    sDevice.device.destroyShaderModule(fragShaderModule);
-    sDevice.device.destroyShaderModule(vertShaderModule);
+    sDevice.destroyShaderModule(fragShaderModule);
+    sDevice.destroyShaderModule(vertShaderModule);
 
     return pipeline;
 }
@@ -478,7 +487,7 @@ vk::DescriptorPool RenderSystem::CreateDescriptorPool(vk::DescriptorPoolSize* si
         .pPoolSizes = sizes
     };
 
-    return sDevice.device.createDescriptorPool(info);
+    return sDevice.createDescriptorPool(info);
 }
 
 void RenderSystem::CreateDescriptorSets(vk::DescriptorSet* sets, uint32_t count, vk::DescriptorPool& pool, vk::DescriptorSetLayout* layouts) {
@@ -489,7 +498,7 @@ void RenderSystem::CreateDescriptorSets(vk::DescriptorSet* sets, uint32_t count,
     };
 
     // It creates a vector, however it will not be used.
-    auto vec = sDevice.device.allocateDescriptorSets(info);
+    auto vec = sDevice.allocateDescriptorSets(info);
     for (uint32_t i = 0; i < count; i++)
         sets[i] = vec[i];
 }
@@ -637,6 +646,64 @@ void RenderSystem::CreateDebugMessenger() {
 }
 #endif
 
+void RenderSystem::CreateDevice() {
+    if (!sGPU.GetQueueFamilies()->graphics.has_value())
+        throw sLogger.RuntimeError("Failed to create logical device! No graphics family found.");
+
+    if (!sGPU.GetQueueFamilies()->present.has_value())
+        throw sLogger.RuntimeError("Failed to create logical device! No presentation family found.");
+
+    if (!sGPU.GetQueueFamilies()->transfer.has_value())
+        throw sLogger.RuntimeError("Failed to create logical device! No transfer family found.");
+
+    vk::DeviceQueueCreateInfo queueCreateInfos[sGPU.GetQueueFamilies()->UniqueSize()];
+    float queuePriority = 1.0f;
+
+    for (uint32_t i = 0; i < sGPU.GetQueueFamilies()->UniqueSize(); i++) {
+        queueCreateInfos[i] = {
+            .queueFamilyIndex = sGPU.GetQueueFamilies()->GetUnique(i),
+            .queueCount = 1,
+            .pQueuePriorities = &queuePriority
+        };
+    }
+
+    vk::PhysicalDeviceFeatures features = sGPU.GetFeatures();
+
+    vk::DeviceCreateInfo info = {
+        .queueCreateInfoCount = static_cast<uint32_t>(sGPU.GetQueueFamilies()->UniqueSize()),
+        .pQueueCreateInfos = queueCreateInfos,
+#ifdef VXL_RENDERSYSTEM_DEBUG
+        .enabledLayerCount = RenderSystem::LAYER_COUNT,
+        .ppEnabledLayerNames = RenderSystem::LAYERS,
+#endif
+        .enabledExtensionCount = GPUDevice::EXTENSION_COUNT,
+        .ppEnabledExtensionNames = GPUDevice::EXTENSIONS.data(),
+        .pEnabledFeatures = &features
+    };
+
+    // TODO figure out how to clean up this code.
+    size_t queueIndicesSize = sGPU.GetQueueFamilies()->UniqueSize();
+
+
+    sDevice = sGPU.device.createDevice(info);
+
+    sGraphicsQueue = sDevice.getQueue(sGPU.GetQueueFamilies()->graphics.value(), 0);
+    sPresentQueue = sDevice.getQueue(sGPU.GetQueueFamilies()->present.value(), queueIndicesSize < 2 ? 0 : 1);
+
+    uint32_t transferIndex = queueIndicesSize < 2 ? 0 : queueIndicesSize < 3 ? 1 : queueIndicesSize - 1;
+    sTransferQueue = sDevice.getQueue(sGPU.GetQueueFamilies()->transfer.value(), transferIndex);
+
+    vk::CommandPoolCreateInfo cmdPoolInfo = {
+        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        .queueFamilyIndex = sGPU.GetQueueFamilies()->graphics.value()
+    };
+
+    sGraphicsCmdPool = sDevice.createCommandPool(cmdPoolInfo);
+
+    cmdPoolInfo.queueFamilyIndex = sGPU.GetQueueFamilies()->transfer.value();
+    sTransferCmdPool = sDevice.createCommandPool(cmdPoolInfo);
+}
+
 void RenderSystem::CreateRenderPass() {
     vk::AttachmentDescription colorAttachment = {
         .format = SwapchainHandler::sImageFormat,
@@ -678,7 +745,7 @@ void RenderSystem::CreateRenderPass() {
         .pDependencies = &dependency
     };
 
-    sRenderPass = sDevice.device.createRenderPass(createInfo);
+    sRenderPass = sDevice.createRenderPass(createInfo);
     sLogger.Info("Created Render pass.");
 }
 
@@ -695,7 +762,7 @@ void RenderSystem::CreateFramebuffers() {
             .layers = 1
         };
 
-        sFramebuffers[i] = sDevice.device.createFramebuffer(info);
+        sFramebuffers[i] = sDevice.createFramebuffer(info);
     }
 }
 
@@ -709,12 +776,12 @@ void RenderSystem::CreateSyncObjects() {
     };
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        sImageAvailableSemaphores[i] = sDevice.device.createSemaphore(semaphoreCreateInfo);
-        sInFlightFences[i] = sDevice.device.createFence(fenceCreateInfo);
+        sImageAvailableSemaphores[i] = sDevice.createSemaphore(semaphoreCreateInfo);
+        sInFlightFences[i] = sDevice.createFence(fenceCreateInfo);
     }
 
     for (size_t i = 0; i < SwapchainHandler::sImages.size(); i++)
-        sRenderFinishedSemaphores[i] = sDevice.device.createSemaphore(semaphoreCreateInfo);
+        sRenderFinishedSemaphores[i] = sDevice.createSemaphore(semaphoreCreateInfo);
 
     sLogger.Info("Created sync objects.");
 }
@@ -765,7 +832,7 @@ vk::ShaderModule RenderSystem::CreateShader(const char* path) {
         .pCode = file.DataAsUInt32()
     };
 
-    return sDevice.device.createShaderModule(info);
+    return sDevice.createShaderModule(info);
 }
 
 uint32_t RenderSystem::GetIndexTypeSize(vk::IndexType type) {
@@ -822,6 +889,7 @@ vk::Format RenderSystem::GetTypeFormat(DataType type) {
 
 // These are wrappers for functions needed by Vulkan HPP.
 
+#ifdef VXL_RENDERSYSTEM_DEBUG
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(VkInstance instance,
                                                 const VkDebugUtilsMessengerCreateInfoEXT* info,
                                                 const VkAllocationCallbacks* allocator,
@@ -834,3 +902,4 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(VkInstance instance,
                                                 VkAllocationCallbacks const* allocator) {
     return RenderSystem::pfnVkDestroyDebugUtilsMessengerEXT(instance, messenger, allocator);
 }
+#endif

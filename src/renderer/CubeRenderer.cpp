@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL_filesystem.h>
 #include <cstddef>
+#include <cstdio>
 #include <glm/ext.hpp>
 #include <string>
 #include "renderer/Camera.h"
@@ -65,8 +66,9 @@ void CubeRenderer::Initialize() {
     RenderSystem::CreateDescriptorSets(sDescSets, RenderSystem::MAX_FRAMES_IN_FLIGHT, sDescPool, layouts);
 
     vk::WriteDescriptorSet descriptorWrites[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+    vk::DescriptorBufferInfo bufferInfos[RenderSystem::MAX_FRAMES_IN_FLIGHT];
     for (size_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
-        vk::DescriptorBufferInfo bufferInfo = {
+        bufferInfos[i] = {
             .buffer = sUBO.buffers[i],
             .offset = 0,
             .range = sUniformSize
@@ -78,11 +80,11 @@ void CubeRenderer::Initialize() {
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = vk::DescriptorType::eUniformBuffer,
-            .pBufferInfo = &bufferInfo
+            .pBufferInfo = &bufferInfos[i]
         };
     }
 
-    RenderSystem::GetDevice()->updateDescriptorSets(RenderSystem::MAX_FRAMES_IN_FLIGHT, descriptorWrites, 0, VK_NULL_HANDLE);
+    RenderSystem::GetDevice().updateDescriptorSets(RenderSystem::MAX_FRAMES_IN_FLIGHT, descriptorWrites, 0, VK_NULL_HANDLE);
 
     sVBO = RenderSystem::CreateVertexBuffer(24, sVertexFormat);
     sVBOMemory = RenderSystem::CreateMemory(sVBO, vk::MemoryPropertyFlagBits::eDeviceLocal);
@@ -164,14 +166,14 @@ void CubeRenderer::Initialize() {
 }
 
 void CubeRenderer::Destroy() {
-    RenderSystem::GetDevice()->freeMemory(sVBOMemory);
-    RenderSystem::GetDevice()->freeMemory(sIBOMemory);
+    RenderSystem::GetDevice().freeMemory(sVBOMemory);
+    RenderSystem::GetDevice().freeMemory(sIBOMemory);
 
-    RenderSystem::GetDevice()->destroyBuffer(sVBO);
-    RenderSystem::GetDevice()->destroyBuffer(sIBO);
+    RenderSystem::GetDevice().destroyBuffer(sVBO);
+    RenderSystem::GetDevice().destroyBuffer(sIBO);
     sUBO.Destroy();
 
-    RenderSystem::GetDevice()->destroyDescriptorPool(sDescPool);
+    RenderSystem::GetDevice().destroyDescriptorPool(sDescPool);
 
     sPipeline.Destroy();
 }

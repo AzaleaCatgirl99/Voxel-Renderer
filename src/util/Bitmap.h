@@ -29,13 +29,13 @@ public:
 
     static void Log3DOuterSlice(const std::array<uint32_t, 1024>& sourceMap);
 
-    static void constexpr SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
+    static void VXL_INLINE SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) noexcept {
         uint32_t t = (std::rotr(a, shift) ^ b) & mask;
         b ^= t;
         a ^= std::rotl(t, shift);
     }
 
-    static void constexpr SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) {
+    static void VXL_INLINE SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) noexcept {
         uint64_t t = ((a >> shift) ^ b) & mask;
         b ^= t;
         a ^= (t << shift);

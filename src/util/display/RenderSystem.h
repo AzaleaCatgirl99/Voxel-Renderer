@@ -21,10 +21,10 @@ class VertexFormat;
 // TODO add anisotropic filtering check
 class RenderSystem final {
 public:
-    static constexpr const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+    static VXL_INLINE const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 #ifdef VXL_RENDERSYSTEM_DEBUG
-    static constexpr uint32_t LAYER_COUNT = 1;
-    static constexpr const char* LAYERS[LAYER_COUNT] = {
+    static VXL_INLINE uint32_t LAYER_COUNT = 1;
+    static VXL_INLINE const char* LAYERS[LAYER_COUNT] = {
         "VK_LAYER_KHRONOS_validation"
     };
     static PFN_vkCreateDebugUtilsMessengerEXT pfnVkCreateDebugUtilsMessengerEXT;
@@ -51,14 +51,14 @@ public:
         vk::DeviceMemory memory[MAX_FRAMES_IN_FLIGHT];
         void* ptrs[MAX_FRAMES_IN_FLIGHT];
 
-        constexpr void Update(const void* data) {
+        VXL_INLINE void Update(const void* data) {
             memcpy(ptrs[sCurrentFrame], data, size);
         }
 
-        constexpr void Destroy() {
+        VXL_INLINE void Destroy() {
             for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-                sDevice.device.destroyBuffer(buffers[i]);
-                sDevice.device.freeMemory(memory[i]);
+                sDevice.destroyBuffer(buffers[i]);
+                sDevice.freeMemory(memory[i]);
             }
         }
     };
@@ -87,16 +87,16 @@ public:
             uint32_t dynamicStateCount = 0;
         };
 
-        constexpr operator vk::Pipeline&() noexcept {
+        VXL_INLINE operator vk::Pipeline&() noexcept {
             return pipeline;
         }
 
-        constexpr void Destroy() {
+        VXL_INLINE void Destroy() {
             if (descriptorSetLayout != VK_NULL_HANDLE)
-                sDevice.device.destroyDescriptorSetLayout(descriptorSetLayout);
+                sDevice.destroyDescriptorSetLayout(descriptorSetLayout);
 
-            sDevice.device.destroyPipeline(pipeline);
-            sDevice.device.destroyPipelineLayout(layout);
+            sDevice.destroyPipeline(pipeline);
+            sDevice.destroyPipelineLayout(layout);
         }
 
         
@@ -128,19 +128,19 @@ public:
     static void AllocateStagedMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size);
     static void CopyBuffer(vk::Buffer& dst, vk::Buffer& src, vk::DeviceSize size, vk::DeviceSize src_offset = 0, vk::DeviceSize dst_offset = 0);
 
-    static constexpr void BindMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset = 0) {
-        sDevice.device.bindBufferMemory(buffer, memory, offset);
+    static VXL_INLINE void BindMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset = 0) {
+        sDevice.bindBufferMemory(buffer, memory, offset);
     }
 
-    static constexpr void* MapMemory(vk::DeviceMemory& memory, vk::DeviceSize size, vk::DeviceSize offset = 0) {
-        return sDevice.device.mapMemory(memory, offset, size);
+    static VXL_INLINE void* MapMemory(vk::DeviceMemory& memory, vk::DeviceSize size, vk::DeviceSize offset = 0) {
+        return sDevice.mapMemory(memory, offset, size);
     }
 
-    static constexpr void UnmapMemory(vk::DeviceMemory& memory) {
-        sDevice.device.unmapMemory(memory);
+    static VXL_INLINE void UnmapMemory(vk::DeviceMemory& memory) {
+        sDevice.unmapMemory(memory);
     }
 
-    static constexpr void AllocateMemory(vk::DeviceMemory& memory, const void* data, vk::DeviceSize size, vk::DeviceSize offset = 0) {
+    static VXL_INLINE void AllocateMemory(vk::DeviceMemory& memory, const void* data, vk::DeviceSize size, vk::DeviceSize offset = 0) {
         void* ptr = MapMemory(memory, size, offset);
         memcpy(ptr, data, size);
         UnmapMemory(memory);
@@ -154,27 +154,23 @@ public:
 
     // ========== Getters & Setters ==========
 
-    static constexpr const uint32_t GetCurrentFrame() noexcept {
+    static VXL_INLINE const uint32_t GetCurrentFrame() noexcept {
         return sCurrentFrame;
     }
 
-    static constexpr vk::RenderPass* GetRenderPass() noexcept {
-        return &sRenderPass;
+    static VXL_INLINE vk::RenderPass& GetRenderPass() noexcept {
+        return sRenderPass;
     }
 
-    static constexpr vk::CommandBuffer* GetCurrentCmdBuffer() noexcept {
-        return &sCommandBuffers[sCurrentFrame];
+    static VXL_INLINE vk::CommandBuffer& GetCurrentCmdBuffer() noexcept {
+        return sCommandBuffers[sCurrentFrame];
     }
 
-    static constexpr vk::Device* GetDevice() noexcept {
-        return &sDevice.device;
-    }
-
-    static constexpr GPUDevice* GetGPU() noexcept {
-        return &sGPU;
+    static VXL_INLINE vk::Device& GetDevice() noexcept {
+        return sDevice;
     }
 private:
-    static constexpr const vk::ApplicationInfo APP_INFO = {
+    static VXL_INLINE const vk::ApplicationInfo APP_INFO = {
         .pApplicationName = VXL_PROJECT_NAME,
         .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
         .pEngineName = "RenderSystem",
@@ -186,7 +182,14 @@ private:
 
     // Physical Device variables.
     static GPUDevice sGPU;
-    static VkDeviceHandler sDevice;
+
+    // Logical Device variables.
+    static vk::Device sDevice;
+    static vk::Queue sGraphicsQueue;
+    static vk::Queue sPresentQueue;
+    static vk::Queue sTransferQueue;
+    static vk::CommandPool sGraphicsCmdPool;
+    static vk::CommandPool sTransferCmdPool;
 
     static vk::Instance sInstance;
 #ifdef VXL_RENDERSYSTEM_DEBUG
@@ -221,6 +224,7 @@ private:
         void* user_data);
     static void CreateDebugMessenger();
 #endif
+    static void CreateDevice();
     static void CreateRenderPass();
     static void CreateFramebuffers();
     static void CreateCommandBuffer();

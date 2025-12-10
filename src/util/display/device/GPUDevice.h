@@ -16,11 +16,11 @@
 class GPUDevice final {
 public:
 #ifdef SDL_PLATFORM_APPLE // Apple device support.
-    static constexpr const uint32_t EXTENSION_COUNT = 2;
+    static VXL_INLINE const uint32_t EXTENSION_COUNT = 2;
 #else
-    static constexpr const uint32_t EXTENSION_COUNT = 1;
+    static VXL_INLINE const uint32_t EXTENSION_COUNT = 1;
 #endif
-    static constexpr std::array<const char*, EXTENSION_COUNT> EXTENSIONS = {
+    static VXL_INLINE std::array<const char*, EXTENSION_COUNT> EXTENSIONS = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
 
 #ifdef SDL_PLATFORM_APPLE // Apple device support.
@@ -33,23 +33,23 @@ public:
         std::optional<uint32_t> present;
         std::optional<uint32_t> transfer;
 
-        constexpr const bool IsFull() const noexcept {
+        VXL_INLINE const bool IsFull() const noexcept {
             return graphics.has_value() && present.has_value() && transfer.has_value();
         }
 
-        constexpr const bool IsSame() const noexcept {
+        VXL_INLINE const bool IsSame() const noexcept {
             return m_uniques.size() == 1;
         }
 
-        constexpr const size_t UniqueSize() const noexcept {
+        VXL_INLINE const size_t UniqueSize() const noexcept {
             return m_uniques.size();
         }
 
-        constexpr const uint32_t GetUnique(size_t i) const noexcept {
+        VXL_INLINE const uint32_t GetUnique(size_t i) const noexcept {
             return m_data.at(i);
         }
 
-        constexpr const uint32_t* Data() const noexcept {
+        VXL_INLINE const uint32_t* Data() const noexcept {
             return m_data.data();
         }
     private:
@@ -67,38 +67,38 @@ public:
 
     void Build(vk::Instance& instance, vk::SurfaceKHR& surface);
 
-    constexpr operator vk::PhysicalDevice() noexcept {
+    VXL_INLINE operator vk::PhysicalDevice() noexcept {
         return device;
     }
 
-    constexpr const vk::PhysicalDeviceProperties GetProperties() const noexcept {
+    VXL_INLINE const vk::PhysicalDeviceProperties GetProperties() const noexcept {
         return m_properties;
     }
 
-    constexpr const vk::PhysicalDeviceFeatures GetFeatures() const noexcept {
+    VXL_INLINE const vk::PhysicalDeviceFeatures GetFeatures() const noexcept {
         return m_features;
     }
 
-    constexpr const vk::PhysicalDeviceMemoryProperties GetMemoryProperties() const noexcept {
+    VXL_INLINE const vk::PhysicalDeviceMemoryProperties GetMemoryProperties() const noexcept {
         return m_memoryProperties;
     }
 
-    constexpr const QueueFamilyIndices* GetQueueFamilies() const noexcept {
+    VXL_INLINE const QueueFamilyIndices* GetQueueFamilies() const noexcept {
         return &m_queueFamilyIndices;
     }
 
-    constexpr const SwapchainSupportDetails GetSwapchainSupport() const noexcept {
+    VXL_INLINE const SwapchainSupportDetails GetSwapchainSupport() const noexcept {
         return m_swapchainSupport;
     }
 
-    constexpr const bool IsExtensionSupported(const char* extension) const {
+    VXL_INLINE const bool IsExtensionSupported(const char* extension) const {
         if (auto search = m_supportedExtensions.find(extension); search != m_supportedExtensions.end())
             return true;
 
         return false;
     }
 
-    constexpr uint32_t FindMemoryType(uint32_t filter, vk::MemoryPropertyFlags properties) {
+    VXL_INLINE uint32_t FindMemoryType(uint32_t filter, vk::MemoryPropertyFlags properties) {
         for (uint32_t i = 0; i < m_memoryProperties.memoryTypeCount; i++)
             if (filter & (1 << i) && (m_memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
                 return i;

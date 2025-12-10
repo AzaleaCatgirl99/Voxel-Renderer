@@ -14,19 +14,19 @@ class SwapchainHandler final {
 public:
     // ========== Building/deletion ==========
 
-    static constexpr void Build(vk::Device& device, GPUDevice* gpu, vk::SurfaceKHR& surface, vk::PresentModeKHR present_mode) {
+    static VXL_INLINE void Build(vk::Device& device, GPUDevice* gpu, vk::SurfaceKHR& surface, vk::PresentModeKHR present_mode) {
         CreateContext(device, gpu, surface, present_mode);
         CreateImageViews(device);
     }
 
-    static constexpr void Delete(vk::Device& device) {
+    static VXL_INLINE void Delete(vk::Device& device) {
         for (auto view : sViews)
             device.destroyImageView(view);
 
         device.destroySwapchainKHR(sSwapchain);
     }
 
-    static constexpr void Rebuild(vk::Device& device, GPUDevice* gpu, vk::SurfaceKHR& surface, vk::PresentModeKHR present_mode) {
+    static VXL_INLINE void Rebuild(vk::Device& device, GPUDevice* gpu, vk::SurfaceKHR& surface, vk::PresentModeKHR present_mode) {
         Delete(device);
         Build(device, gpu, surface, present_mode);
     }

@@ -17,7 +17,7 @@ float App::sLastFrame = 0.0f;
 
 void App::Run() {
     // Test();
-    
+
     Init();
 
     while (sRunning)
@@ -80,7 +80,7 @@ void App::RenderLoop(vk::CommandBuffer* buffer) {
 }
 
 void App::Cleanup() {
-    RenderSystem::GetDevice()->waitIdle();
+    RenderSystem::GetDevice().waitIdle();
 
     // ImGUIHelper::Destroy();
 

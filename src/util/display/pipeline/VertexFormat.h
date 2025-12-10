@@ -12,10 +12,10 @@ public:
         size_t size = 0;
     };
 
-    constexpr VertexFormat() = default;
+    VXL_INLINE VertexFormat() = default;
 
     // Adds an element.
-    constexpr VertexFormat& Element(DataType type) {
+    VXL_INLINE VertexFormat& Element(DataType type) {
         if (m_elementsSize < 10) {
             m_elements[m_elementsSize] = {type, GetDataTypeCount(type)};
             m_elementsSize++;
@@ -25,15 +25,15 @@ public:
         return *this;
     }
 
-    constexpr const size_t GetStride() const noexcept {
+    VXL_INLINE const size_t GetStride() const noexcept {
         return m_stride;
     }
 
-    constexpr const size_t GetElementsSize() const noexcept {
+    VXL_INLINE const size_t GetElementsSize() const noexcept {
         return m_elementsSize;
     }
 
-    constexpr const std::array<ElementData, 10> GetElements() const noexcept {
+    VXL_INLINE const std::array<ElementData, 10> GetElements() const noexcept {
         return m_elements;
     }
 private:

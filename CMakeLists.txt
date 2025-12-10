@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD 23)
 add_compile_options(-march=native)
 
 # Default settings for the program
-set(VXL_VERBOSE_LOGGING OFF)
+set(VXL_VERBOSE_LOGGING ON)
 set(VXL_INFO_LOGGING ON)
 set(VXL_WARNING_LOGGING ON)
 set(VXL_ERROR_LOGGING ON)
@@ -44,6 +44,8 @@ if (VXL_ERROR_LOGGING)
 endif ()
 
 add_compile_definitions(VXL_PROJECT_NAME="Voxel Renderer")
+# A simple macro for inlining with constexpr
+add_compile_definitions("VXL_INLINE=inline constexpr")
 
 # ========== Source Files & Executable ==========
 

@@ -2,9 +2,6 @@
 
 #include <vector>
 #include <cstdint>
-#include <bitset>
-#include <unordered_map>
-#include <variant>
 #include <array>
 #include "util/SparseVector.h"
 #include "util/Logger.h"
@@ -39,9 +36,9 @@ protected:
 
     bool m_hasAir;
 
-    virtual inline uint16_t RawGetBlock(const uint16_t index) const = 0;
+    virtual uint16_t RawGetBlock(const uint16_t index) const = 0;
 
-    virtual inline void RawSetBlock(const uint16_t index, const uint16_t newBlock) = 0;
+    virtual void RawSetBlock(const uint16_t index, const uint16_t newBlock) = 0;
 
     virtual ChunkBitmap GetBlockBitmap(const BlockTypes block, const bool invert = false) const = 0;
 private:

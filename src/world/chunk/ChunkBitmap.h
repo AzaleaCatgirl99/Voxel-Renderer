@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstdint>
-#include <bit>
 #include "util/Logger.h"
 
 class ChunkBitmap final {
@@ -40,19 +39,19 @@ public:
     // Shorthand for an inner followed by outer transposition.
     ChunkBitmap& SwapOuterInnerAxes();
 
-    constexpr uint32_t* Data() {
+    VXL_INLINE uint32_t* Data() noexcept {
         return m_bitmap.data();
     }
 
-    constexpr ChunkBitmap Copy() const {
+    VXL_INLINE ChunkBitmap Copy() const {
         return ChunkBitmap(*this);
     }
 
-    constexpr auto& operator[](size_t index) {
+    VXL_INLINE auto& operator[](size_t index) {
         return m_bitmap[index];
     }
 
-    constexpr auto& operator[](size_t index) const {
+    VXL_INLINE auto& operator[](size_t index) const {
         return m_bitmap[index];
     }
 
@@ -60,13 +59,13 @@ public:
 private:
     static Logger sLogger;
 
-    static void constexpr SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
+    static void VXL_INLINE SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
         uint32_t t = ((b >> shift) ^ a) & mask;
         a ^= t;
         b ^= (t << shift);
     }
 
-    static void constexpr SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) {
+    static void VXL_INLINE SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) {
         uint64_t t = ((b >> shift) ^ a) & mask;
         a ^= t;
         b ^= (t << shift);

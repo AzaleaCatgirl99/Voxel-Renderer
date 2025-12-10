@@ -2,23 +2,21 @@
 
 #include <vector>
 #include <queue>
-#include <cstdint>
-#include <iostream>
 
 // Class for handling sparse vectors.
 template<typename DataType, typename IndexType>
 class SparseVector {
 public:
     // Default constructor.
-    SparseVector() = default;
+    VXL_INLINE SparseVector() = default;
 
     // Returns the value at the specified index.
-    inline DataType& operator [](IndexType pIndex) {
+    VXL_INLINE DataType& operator [](IndexType pIndex) {
         return m_data[pIndex];
     }
 
     // Ensure elements inserted are deleted later with Delete() before they are destroyed.
-    inline IndexType Insert(DataType pValue) {
+    VXL_INLINE IndexType Insert(DataType pValue) {
         // Double size if needed.
         IndexType newIndex;
         if (!m_unused.empty()) {
@@ -33,28 +31,28 @@ public:
     }
 
     // Deletes an element given its index.
-    inline void Delete(IndexType pIndex) {
+    VXL_INLINE void Delete(IndexType pIndex) {
         // m_data[pIndex] = nullptr;
         m_unused.push(pIndex);
     }
 
     // Gets the number of active elements in the vector.
-    inline IndexType Size() {
+    VXL_INLINE IndexType Size() {
         return m_data.size() - m_unused.size();
     }
 
     // Reserves the underlying vector.
-    inline void Reserve(const IndexType size) {
+    VXL_INLINE void Reserve(const IndexType size) {
         m_data.reserve(size);
     }
 
     // Finds if the sparse vector is full.
-    inline bool IsFull() const {
+    VXL_INLINE bool IsFull() const {
         return m_unused.empty() && m_data.capacity() == m_data.size();
     }
 
     // Returns a pointer to the start of the internal vector.
-    inline DataType* Data() const {
+    VXL_INLINE DataType* Data() const {
         return m_data.data();
     }
 private:

@@ -15,14 +15,14 @@ class VkDeviceHandler final {
 public:
     void Build(vk::Instance* instance, GPUDevice* gpu);
 
-    constexpr void Delete() {
+    VXL_INLINE void Delete() {
         device.destroyCommandPool(graphicsCmdPool);
         device.destroyCommandPool(transferCmdPool);
 
         device.destroy();
     }
 
-    constexpr operator vk::Device&() noexcept {
+    VXL_INLINE operator vk::Device&() noexcept {
         return device;
     }
 

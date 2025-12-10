@@ -31,102 +31,102 @@ public:
     static void Create(const char* title, const DisplayMode& mode);
 
     // Gets the window width.
-    static constexpr const int Width() {
+    static VXL_INLINE const int Width() {
         int width = 0;
         SDL_GetWindowSize(sContext, &width, nullptr);
         return width;
     }
 
     // Gets the window height.
-    static constexpr const int Height() {
+    static VXL_INLINE const int Height() {
         int height = 0;
         SDL_GetWindowSize(sContext, nullptr, &height);
         return height;
     }
 
     // Gets the window width with the DPI.
-    static constexpr const int DisplayWidth() {
+    static VXL_INLINE const int DisplayWidth() {
         return (int)(Width() * DPIScale());
     }
 
     // Gets the window height with the DPI.
-    static constexpr const int DisplayHeight() {
+    static VXL_INLINE const int DisplayHeight() {
         return (int)(Height() * DPIScale());
     }
 
     // Gets the scale for the DPI.
-    static constexpr const float DPIScale() {
+    static VXL_INLINE const float DPIScale() {
         return SDL_GetWindowDisplayScale(sContext);
     }
 
     // Gets the window's aspect ratio.
-    static constexpr const float ApsectRatio() {
+    static VXL_INLINE const float ApsectRatio() {
         return (float)Width() / (float)Height();
     }
 
     // Sets the window to fullscreen.
-    static constexpr void SetFullscreen(bool toggle) {
+    static VXL_INLINE void SetFullscreen(bool toggle) {
         SDL_SetWindowFullscreen(sContext, toggle);
     }
 
     // Sets the window's title.
-    static constexpr void SetTitle(const char* title) {
+    static VXL_INLINE void SetTitle(const char* title) {
         SDL_SetWindowTitle(sContext, title);
     }
 
     // Destroys the window.
-    static constexpr void Destroy() {
+    static VXL_INLINE void Destroy() {
         SDL_DestroyWindow(sContext);
         SDL_Quit();
     }
 
     // Gets the current SDL event.
-    static constexpr const SDL_Event* GetEvent() noexcept {
+    static VXL_INLINE const SDL_Event* GetEvent() noexcept {
         return &sEvent;
     }
 
     // Polls the current SDL event.
-    static constexpr bool PollEvent() {
+    static VXL_INLINE bool PollEvent() {
         return SDL_PollEvent(&sEvent);
     }
 
     // Gets the mouse's X position.
-    static constexpr const float MouseX() {
+    static VXL_INLINE const float MouseX() {
         float x;
         SDL_GetMouseState(&x, nullptr);
         return x;
     }
 
     // Gets the mouse's Y position.
-    static constexpr const float MouseY() {
+    static VXL_INLINE const float MouseY() {
         float y;
         SDL_GetMouseState(nullptr, &y);
         return y;
     }
 
     // Gets the mouse's relative X position.
-    static constexpr const float MouseRelativeX() {
+    static VXL_INLINE const float MouseRelativeX() {
         float x;
         SDL_GetRelativeMouseState(&x, nullptr);
         return x;
     }
 
     // Gets the mouse's relative Y position.
-    static constexpr const float MouseRelativeY() {
+    static VXL_INLINE const float MouseRelativeY() {
         float y;
         SDL_GetRelativeMouseState(nullptr, &y);
         return y;
     }
 
     // Gets the mouse's relative position.
-    static constexpr const glm::vec2 MouseRelativePos() {
+    static VXL_INLINE const glm::vec2 MouseRelativePos() {
         glm::vec2 ret;
         SDL_GetRelativeMouseState(&ret.x, &ret.y);
         return ret;
     }
 
     // Sets the mouse as grabbed by the window.
-    static constexpr void SetMouseGrabbed(bool grabbed) {
+    static VXL_INLINE void SetMouseGrabbed(bool grabbed) {
         if (grabbed)
             SDL_HideCursor();
         else
@@ -136,12 +136,12 @@ public:
     }
 
     // Sets the mouse position.
-    static constexpr void SetMousePosition(float x, float y) {
+    static VXL_INLINE void SetMousePosition(float x, float y) {
         SDL_WarpMouseInWindow(sContext, x, y);
     }
 
     // Creates a Vulkan window surface.
-    static constexpr vk::SurfaceKHR CreateSurface(vk::Instance& instance) {
+    static VXL_INLINE vk::SurfaceKHR CreateSurface(vk::Instance& instance) {
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         if (!SDL_Vulkan_CreateSurface(sContext, instance, VK_NULL_HANDLE, &surface))
             throw sLogger.RuntimeError("Failed to create window surface! ", SDL_GetError());
@@ -150,17 +150,17 @@ public:
     }
 
     // Destroys a Vulkan window surface.
-    static constexpr void DestroySurface(vk::Instance& instance, vk::SurfaceKHR& surface) {
+    static VXL_INLINE void DestroySurface(vk::Instance& instance, vk::SurfaceKHR& surface) {
         SDL_Vulkan_DestroySurface(instance, surface, VK_NULL_HANDLE);
     }
 
     // Gets the SDL window context.
-    static constexpr SDL_Window* GetContext() noexcept {
+    static VXL_INLINE SDL_Window* GetContext() noexcept {
         return sContext;
     }
 
     // Checks if the window is minimized.
-    static constexpr const bool IsMinimized() noexcept {
+    static VXL_INLINE const bool IsMinimized() noexcept {
         return sMinimized;
     }
 private:
