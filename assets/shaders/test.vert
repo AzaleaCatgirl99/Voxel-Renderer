@@ -5,7 +5,7 @@ layout (location = 1) in vec4 inColor;
 
 layout (location = 0) out vec4 fragColor;
 
-layout (std140, set = 0, binding = 0) uniform Model {
+layout (binding = 0) uniform Model {
     mat4 model;
     mat4 view;
     mat4 proj;

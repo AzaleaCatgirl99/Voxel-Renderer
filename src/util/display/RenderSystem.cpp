@@ -6,7 +6,6 @@
 #include <cstring>
 #include <functional>
 #include <optional>
-#include <vulkan/vulkan_beta.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -17,6 +16,8 @@
 #include "util/display/vulkan/VkResultHandler.h"
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_beta.h>
 #include "util/display/pipeline/VertexFormat.h"
 
 RenderSystem::Settings RenderSystem::sSettings;
@@ -524,6 +525,14 @@ void RenderSystem::CreateInstance() {
 #endif
 #endif
 
+    vk::ApplicationInfo appInfo = {
+        .pApplicationName = VXL_PROJECT_NAME,
+        .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
+        .pEngineName = "RenderSystem",
+        .engineVersion = VK_MAKE_VERSION(0, 1, 0),
+        .apiVersion = vk::ApiVersion10
+    };
+
     vk::InstanceCreateInfo info = {
 #ifdef VXL_RENDERSYSTEM_DEBUG
         .pNext = &sDebugCreateInfo,
@@ -531,7 +540,7 @@ void RenderSystem::CreateInstance() {
 #ifdef SDL_PLATFORM_APPLE
         .flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR, // Apple devices support flag.
 #endif
-        .pApplicationInfo = &APP_INFO,
+        .pApplicationInfo = &appInfo,
 #ifdef VXL_RENDERSYSTEM_DEBUG
         .enabledLayerCount = LAYER_COUNT,
         .ppEnabledLayerNames = LAYERS,
@@ -556,7 +565,7 @@ std::vector<const char*> RenderSystem::GetRequiredExtensions() {
 
     // Add support for Apple devices.
     #ifdef SDL_PLATFORM_APPLE
-    extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    extensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
     extensions.emplace_back("VK_KHR_get_physical_device_properties2");
     #endif
 
@@ -596,42 +605,39 @@ bool RenderSystem::CheckValidationLayerSupport() {
     return true;
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL RenderSystem::DebugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-    VkDebugUtilsMessageTypeFlagsEXT message_type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+VKAPI_ATTR vk::Bool32 VKAPI_CALL RenderSystem::DebugCallback(
+    vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    vk::DebugUtilsMessageTypeFlagsEXT message_type,
+    const vk::DebugUtilsMessengerCallbackDataEXT* callback_data,
     void* user_data) {
 
     // Identify the string prefix to use depending on the message type.
     const char* messageTypeStr;
-    switch (message_type) {
-    case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
+    if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral)
         messageTypeStr = "[VkDebug/GENERAL] ";
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT:
+    else if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation)
         messageTypeStr = "[VkDebug/VALIDATION] ";
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT:
+    else if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
         messageTypeStr = "[VkDebug/PERFORMANCE] ";
-        break;
-    }
+    else if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding)
+        messageTypeStr = "[VkDebug/DEVICE_ADDR_BINDING] ";
+    else
+        messageTypeStr = "[VkDebug] ";
 
     // Specify the type of log depending on the severity.
     switch (message_severity) {
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
         sLogger.Println(messageTypeStr, callback_data->pMessage);
         return VK_FALSE;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
         sLogger.Println(messageTypeStr, callback_data->pMessage);
         return VK_FALSE;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
         sLogger.Println(messageTypeStr, callback_data->pMessage);
         return VK_FALSE;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
         sLogger.Println(messageTypeStr, callback_data->pMessage);
         return VK_TRUE;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_FLAG_BITS_MAX_ENUM_EXT:
-        return VK_FALSE;
     }
 }
 
@@ -672,10 +678,6 @@ void RenderSystem::CreateDevice() {
     vk::DeviceCreateInfo info = {
         .queueCreateInfoCount = static_cast<uint32_t>(sGPU.GetQueueFamilies()->UniqueSize()),
         .pQueueCreateInfos = queueCreateInfos,
-#ifdef VXL_RENDERSYSTEM_DEBUG
-        .enabledLayerCount = RenderSystem::LAYER_COUNT,
-        .ppEnabledLayerNames = RenderSystem::LAYERS,
-#endif
         .enabledExtensionCount = GPUDevice::EXTENSION_COUNT,
         .ppEnabledExtensionNames = GPUDevice::EXTENSIONS.data(),
         .pEnabledFeatures = &features
@@ -683,7 +685,6 @@ void RenderSystem::CreateDevice() {
 
     // TODO figure out how to clean up this code.
     size_t queueIndicesSize = sGPU.GetQueueFamilies()->UniqueSize();
-
 
     sDevice = sGPU.device.createDevice(info);
 

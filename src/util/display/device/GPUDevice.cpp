@@ -85,13 +85,10 @@ void GPUDevice::CreateQueueFamilyIndices(vk::PhysicalDevice& gpu, vk::Instance& 
         if (SDL_Vulkan_GetPresentationSupport(instance, gpu, i))
             m_queueFamilyIndices.present = i;
 
-#ifdef SDL_PLATFORM_APPLE
-        if (m_queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eTransfer)
-            m_queueFamilyIndices.transfer = i;
-#else
         if ((m_queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eTransfer) && !(m_queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics))
             m_queueFamilyIndices.transfer = i;
-#endif
+        else if (m_queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eTransfer)
+            m_queueFamilyIndices.transfer = i;
 
         // Breaks if everything has already been added to the indices.
         if (m_queueFamilyIndices.IsFull())
