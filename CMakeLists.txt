@@ -78,10 +78,6 @@ target_compile_definitions(Voxel-Renderer PUBLIC
     $<$<CONFIG:RelWithDebInfo>:VXL_DEBUG=1>
     $<$<CONFIG:Release>:VXL_RELEASE=1>
     $<$<CONFIG:MinSizeRel>:VXL_RELEASE=1>
-
-    # Debugging
-    $<$<CONFIG:Debug>:VXL_RENDERSYSTEM_DEBUG=1>
-    $<$<CONFIG:RelWithDebInfo>:VXL_RENDERSYSTEM_DEBUG=1>
 )
 
 # ========== Libraries ==========

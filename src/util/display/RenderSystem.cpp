@@ -13,6 +13,7 @@
 #include "util/display/device/GPUDevice.h"
 #include "util/display/device/SwapchainHandler.h"
 #include "util/display/Window.h"
+#include "util/display/vulkan/VkDebugger.h"
 #include "util/display/vulkan/VkResultHandler.h"
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
@@ -33,19 +34,6 @@ vk::CommandPool RenderSystem::sGraphicsCmdPool;
 vk::CommandPool RenderSystem::sTransferCmdPool;
 
 vk::Instance RenderSystem::sInstance;
-#ifdef VXL_RENDERSYSTEM_DEBUG
-vk::DebugUtilsMessengerEXT RenderSystem::sDebugMessenger;
-vk::DebugUtilsMessengerCreateInfoEXT RenderSystem::sDebugCreateInfo = {
-    .messageType =
-        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-    .pfnUserCallback = DebugCallback,
-    .pUserData = VK_NULL_HANDLE
-};
-PFN_vkCreateDebugUtilsMessengerEXT RenderSystem::pfnVkCreateDebugUtilsMessengerEXT;
-PFN_vkDestroyDebugUtilsMessengerEXT RenderSystem::pfnVkDestroyDebugUtilsMessengerEXT;
-#endif
 vk::SurfaceKHR RenderSystem::sSurface;
 vk::RenderPass RenderSystem::sRenderPass;
 uint32_t RenderSystem::sCurrentFrame = 0;
@@ -67,7 +55,7 @@ void RenderSystem::Initialize(const Settings& settings) {
 
     CreateInstance();
 #ifdef VXL_RENDERSYSTEM_DEBUG
-    CreateDebugMessenger();
+    VkDebugger::CreateMessenger(sInstance);
 #endif
     sSurface = Window::CreateSurface(sInstance);
     sGPU.Build(sInstance, sSurface);
@@ -106,7 +94,7 @@ void RenderSystem::Destroy() {
     Window::DestroySurface(sInstance, sSurface);
 
 #ifdef VXL_RENDERSYSTEM_DEBUG
-    sInstance.destroyDebugUtilsMessengerEXT(sDebugMessenger);
+    VkDebugger::Destroy(sInstance);
 #endif
 
     sInstance.destroy();
@@ -428,7 +416,7 @@ RenderSystem::Pipeline RenderSystem::CreatePipeline(Pipeline::Info& info) {
             .pBindings = info.bindings
         };
 
-        pipeline.descriptorSetLayout =  sDevice.createDescriptorSetLayout(layoutInfo);
+        pipeline.descriptorSetLayout = sDevice.createDescriptorSetLayout(layoutInfo);
     }
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {
@@ -507,22 +495,9 @@ void RenderSystem::CreateDescriptorSets(vk::DescriptorSet* sets, uint32_t count,
 void RenderSystem::CreateInstance() {
     std::vector<const char*> extensions = GetRequiredExtensions();
 
-#ifdef VXL_RENDERSYSTEM_DEBUG
-    if (!CheckValidationLayerSupport())
+#ifdef VXL_DEBUG
+    if (!VkDebugger::CheckValidationLayerSupport())
         throw sLogger.RuntimeError("Not all of the requested validation layers are available!");
-
-#ifdef VXL_VERBOSE_LOGGING
-    sDebugCreateInfo.messageSeverity |= vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose;
-#endif
-#ifdef VXL_INFO_LOGGING
-    sDebugCreateInfo.messageSeverity |= vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo;
-#endif
-#ifdef VXL_WARNING_LOGGING
-    sDebugCreateInfo.messageSeverity |= vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning;
-#endif
-#ifdef VXL_ERROR_LOGGING
-    sDebugCreateInfo.messageSeverity |= vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
-#endif
 #endif
 
     vk::ApplicationInfo appInfo = {
@@ -534,20 +509,17 @@ void RenderSystem::CreateInstance() {
     };
 
     vk::InstanceCreateInfo info = {
-#ifdef VXL_RENDERSYSTEM_DEBUG
-        .pNext = &sDebugCreateInfo,
-#endif
 #ifdef SDL_PLATFORM_APPLE
         .flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR, // Apple devices support flag.
 #endif
         .pApplicationInfo = &appInfo,
-#ifdef VXL_RENDERSYSTEM_DEBUG
-        .enabledLayerCount = LAYER_COUNT,
-        .ppEnabledLayerNames = LAYERS,
-#endif
         .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
+
+#ifdef VXL_DEBUG
+    VkDebugger::Initialize(info); // Initializes the debugger.
+#endif
     
     sInstance = vk::createInstance(info);
 }
@@ -569,88 +541,13 @@ std::vector<const char*> RenderSystem::GetRequiredExtensions() {
     extensions.emplace_back("VK_KHR_get_physical_device_properties2");
     #endif
 
-#ifdef VXL_RENDERSYSTEM_DEBUG
+#ifdef VXL_DEBUG
     // Add extension for validation layer message callback.
     extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
     return extensions;
 }
-
-#ifdef VXL_RENDERSYSTEM_DEBUG
-bool RenderSystem::CheckValidationLayerSupport() {
-    // Find the number of validation layers available.
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, VK_NULL_HANDLE);
-
-    // Find the properties of the available validation layers.
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-    // Check if the wanted validation layers are available.
-    for (const char* layerName : LAYERS) {
-        bool layerFound = false;
-
-        for (const auto& layerProperties : availableLayers) {
-            if (strcmp(layerName, layerProperties.layerName) == 0) {
-                layerFound = true;
-                break;
-            }
-        }
-
-        if (!layerFound)
-            return false;
-    }
-
-    return true;
-}
-
-VKAPI_ATTR vk::Bool32 VKAPI_CALL RenderSystem::DebugCallback(
-    vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity,
-    vk::DebugUtilsMessageTypeFlagsEXT message_type,
-    const vk::DebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data) {
-
-    // Identify the string prefix to use depending on the message type.
-    const char* messageTypeStr;
-    if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral)
-        messageTypeStr = "[VkDebug/GENERAL] ";
-    else if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation)
-        messageTypeStr = "[VkDebug/VALIDATION] ";
-    else if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
-        messageTypeStr = "[VkDebug/PERFORMANCE] ";
-    else if (message_type == vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding)
-        messageTypeStr = "[VkDebug/DEVICE_ADDR_BINDING] ";
-    else
-        messageTypeStr = "[VkDebug] ";
-
-    // Specify the type of log depending on the severity.
-    switch (message_severity) {
-    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
-        sLogger.Println(messageTypeStr, callback_data->pMessage);
-        return VK_FALSE;
-    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
-        sLogger.Println(messageTypeStr, callback_data->pMessage);
-        return VK_FALSE;
-    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
-        sLogger.Println(messageTypeStr, callback_data->pMessage);
-        return VK_FALSE;
-    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
-        sLogger.Println(messageTypeStr, callback_data->pMessage);
-        return VK_TRUE;
-    }
-}
-
-void RenderSystem::CreateDebugMessenger() {
-    // Creates the function pointers needed for Vulkan HPP.
-    pfnVkCreateDebugUtilsMessengerEXT = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-                        sInstance.getProcAddr("vkCreateDebugUtilsMessengerEXT"));
-    pfnVkDestroyDebugUtilsMessengerEXT = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-                        sInstance.getProcAddr("vkDestroyDebugUtilsMessengerEXT"));
-
-    sDebugMessenger = sInstance.createDebugUtilsMessengerEXT(sDebugCreateInfo);
-}
-#endif
 
 void RenderSystem::CreateDevice() {
     if (!sGPU.GetQueueFamilies()->graphics.has_value())
@@ -887,20 +784,3 @@ vk::Format RenderSystem::GetTypeFormat(DataType type) {
         return vk::Format::eUndefined;
     }
 }
-
-// These are wrappers for functions needed by Vulkan HPP.
-
-#ifdef VXL_RENDERSYSTEM_DEBUG
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(VkInstance instance,
-                                                const VkDebugUtilsMessengerCreateInfoEXT* info,
-                                                const VkAllocationCallbacks* allocator,
-                                                VkDebugUtilsMessengerEXT* messenger) {
-    return RenderSystem::pfnVkCreateDebugUtilsMessengerEXT(instance, info, allocator, messenger);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(VkInstance instance,
-                                                VkDebugUtilsMessengerEXT messenger,
-                                                VkAllocationCallbacks const* allocator) {
-    return RenderSystem::pfnVkDestroyDebugUtilsMessengerEXT(instance, messenger, allocator);
-}
-#endif
