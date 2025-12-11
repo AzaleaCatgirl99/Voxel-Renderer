@@ -71,7 +71,7 @@ void App::MainLoop() {
     RenderSystem::UpdateDisplay();
 }
 
-void App::RenderLoop(vk::CommandBuffer* buffer) {
+void App::RenderLoop(vk::CommandBuffer& buffer) {
     CubeRenderer::Settings cube = {
         .m_pos = {8.0f, 0.0f, 0.0f},
         .m_rot = {0.0f, -90.0f, 0.0f}

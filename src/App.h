@@ -25,6 +25,6 @@ private:
 
     static void Init();
     static void MainLoop();
-    static void RenderLoop(vk::CommandBuffer* buffer);
+    static void RenderLoop(vk::CommandBuffer& buffer);
     static void Cleanup();
 };

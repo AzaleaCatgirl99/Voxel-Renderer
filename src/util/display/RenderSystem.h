@@ -33,7 +33,7 @@ public:
 
     struct Settings {
         SwapInterval swapInterval;
-        std::function<void(vk::CommandBuffer*)> cmdCallback;
+        std::function<void(vk::CommandBuffer&)> cmdCallback;
     };
 
     // Struct for storing uniform buffer data.
