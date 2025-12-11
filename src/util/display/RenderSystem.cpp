@@ -118,7 +118,7 @@ void RenderSystem::RecreateSwapchain() {
 void RenderSystem::UpdateDisplay() {
     vk::Result result = sDevice.waitForFences(1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
 
-    auto index = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, 0, sImageAvailableSemaphores[sCurrentFrame]);
+    auto index = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, UINT64_MAX, sImageAvailableSemaphores[sCurrentFrame]);
     if (result == vk::Result::eErrorOutOfDateKHR) {
         RecreateSwapchain();
         return;
@@ -129,6 +129,7 @@ void RenderSystem::UpdateDisplay() {
     uint32_t imageIndex = index.value;
 
     result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
+    VkResultHandler::CheckResult(result, "Failed to reset in flight fence!");
 
     sCommandBuffers[sCurrentFrame].reset();
     BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], imageIndex);
@@ -138,7 +139,7 @@ void RenderSystem::UpdateDisplay() {
 
     sCommandBuffers[sCurrentFrame].endRenderPass();
     sCommandBuffers[sCurrentFrame].end();
-    
+
     vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
     vk::SubmitInfo submitInfo = {
         .waitSemaphoreCount = 1,
