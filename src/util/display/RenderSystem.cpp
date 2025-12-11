@@ -130,7 +130,7 @@ void RenderSystem::UpdateDisplay() {
     BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
 
     // Calls the command callback, which stores all of the commands for rendering.
-    sSettings.cmdCallback(&sCommandBuffers[sCurrentFrame]);
+    sSettings.cmdCallback(sCommandBuffers[sCurrentFrame]);
 
     sCommandBuffers[sCurrentFrame].endRenderPass();
     sCommandBuffers[sCurrentFrame].end();

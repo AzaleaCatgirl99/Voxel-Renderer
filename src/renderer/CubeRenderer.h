@@ -20,7 +20,7 @@ public:
 
     static void Initialize();
     static void Destroy();
-    static void Draw(vk::CommandBuffer* buffer, const Settings& settings);
+    static void Draw(vk::CommandBuffer& buffer, const Settings& settings);
 private:
     struct ModelData {
         glm::mat4 m_model;

@@ -178,7 +178,7 @@ void CubeRenderer::Destroy() {
     sPipeline.Destroy();
 }
 
-void CubeRenderer::Draw(vk::CommandBuffer* buffer, const Settings& settings) {
+void CubeRenderer::Draw(vk::CommandBuffer& buffer, const Settings& settings) {
     glm::mat4 model(1.0f);
     model = glm::translate(model, settings.m_pos);
     model = glm::rotate(model, glm::radians(settings.m_rot.x), {1.0f, 0.0f, 0.0f});
@@ -195,11 +195,11 @@ void CubeRenderer::Draw(vk::CommandBuffer* buffer, const Settings& settings) {
 
     sUBO.Update(&data);
 
-    buffer->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, sPipeline.layout, 0, 1, &sDescSets[RenderSystem::GetCurrentFrame()], 0, VK_NULL_HANDLE);
-    buffer->bindPipeline(vk::PipelineBindPoint::eGraphics, sPipeline);
+    buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, sPipeline.layout, 0, 1, &sDescSets[RenderSystem::GetCurrentFrame()], 0, VK_NULL_HANDLE);
+    buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, sPipeline);
     vk::DeviceSize offset = 0;
-    buffer->bindVertexBuffers(0, 1, &sVBO, &offset);
-    buffer->bindIndexBuffer(sIBO, 0, vk::IndexType::eUint16);
+    buffer.bindVertexBuffers(0, 1, &sVBO, &offset);
+    buffer.bindIndexBuffer(sIBO, 0, vk::IndexType::eUint16);
 
-    buffer->drawIndexed(36, 1, 0, 0, 0);
+    buffer.drawIndexed(36, 1, 0, 0, 0);
 }
