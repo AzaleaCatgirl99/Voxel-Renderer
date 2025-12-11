@@ -42,7 +42,6 @@ uint32_t RenderSystem::sCurrentFrame = 0;
 vk::CommandBuffer RenderSystem::sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
 vk::Semaphore RenderSystem::sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
 vk::Fence RenderSystem::sInFlightFences[MAX_FRAMES_IN_FLIGHT];
-uint32_t RenderSystem::sImageIndex = 0;
 
 std::vector<vk::Semaphore> RenderSystem::sRenderFinishedSemaphores;
 std::vector<vk::Framebuffer> RenderSystem::sFramebuffers;
@@ -122,12 +121,12 @@ void RenderSystem::UpdateDisplay() {
 
     auto index = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, 0, sImageAvailableSemaphores[sCurrentFrame]);
     VkResultHandler::CheckResult(index.result, "Failed to get image index!");
-    sImageIndex = index.value;
+    uint32_t imageIndex = index.value;
 
     result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
 
     sCommandBuffers[sCurrentFrame].reset();
-    BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], sImageIndex);
+    BeginRecordCmdBuffer(sCommandBuffers[sCurrentFrame], imageIndex);
 
     // Calls the command callback, which stores all of the commands for rendering.
     sSettings.cmdCallback(sCommandBuffers[sCurrentFrame]);
@@ -143,7 +142,7 @@ void RenderSystem::UpdateDisplay() {
         .commandBufferCount = 1,
         .pCommandBuffers = &sCommandBuffers[sCurrentFrame],
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &sRenderFinishedSemaphores[sImageIndex]
+        .pSignalSemaphores = &sRenderFinishedSemaphores[imageIndex]
     };
 
     result = sGraphicsQueue.submit(1, &submitInfo, sInFlightFences[sCurrentFrame]);
@@ -151,10 +150,10 @@ void RenderSystem::UpdateDisplay() {
 
     vk::PresentInfoKHR presentInfo = {
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &sRenderFinishedSemaphores[sImageIndex],
+        .pWaitSemaphores = &sRenderFinishedSemaphores[imageIndex],
         .swapchainCount = 1,
         .pSwapchains = &SwapchainHandler::sSwapchain,
-        .pImageIndices = &sImageIndex,
+        .pImageIndices = &imageIndex,
         .pResults = VK_NULL_HANDLE
     };
 
