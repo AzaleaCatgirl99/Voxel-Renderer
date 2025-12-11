@@ -15,17 +15,9 @@
 
 class GPUDevice final {
 public:
-#ifdef SDL_PLATFORM_APPLE // Apple device support.
-    static VXL_INLINE const uint32_t EXTENSION_COUNT = 2;
-#else
     static VXL_INLINE const uint32_t EXTENSION_COUNT = 1;
-#endif
     static VXL_INLINE std::array<const char*, EXTENSION_COUNT> EXTENSIONS = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-
-#ifdef SDL_PLATFORM_APPLE // Apple device support.
-        , VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
-#endif
+        vk::KHRSwapchainExtensionName
     };
 
     struct QueueFamilyIndices {

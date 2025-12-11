@@ -1,12 +1,5 @@
 #include "util/display/vulkan/VkResultHandler.h"
 
-// Fixes missing macros for Apple devices.
-#ifdef SDL_PLATFORM_APPLE
-#define VK_RESULT_ERROR_VALIDATION_FAILED vk::Result::eErrorValidationFailedEXT
-#else
-#define VK_RESULT_ERROR_VALIDATION_FAILED vk::Result::eErrorValidationFailed
-#endif
-
 Logger VkResultHandler::sLogger = Logger("RenderSystem");
 
 void VkResultHandler::CheckResult(const vk::Result result, const char* error, std::optional<const char*> success) {
@@ -88,7 +81,7 @@ const char* VkResultHandler::GetResultDescription(const vk::Result result) {
         return "A surface has changed in such a way that it is no longer compatible with the swapchain, and further presentation requests using the swapchain will fail. Applications must query the new surface properties and recreate their swapchain if they wish to continue presenting to the surface.";
     case vk::Result::eErrorIncompatibleDisplayKHR:
         return "The display used by a swapchain does not use the same presentable image layout, or is incompatible in a way that prevents sharing an image.";
-    case VK_RESULT_ERROR_VALIDATION_FAILED:
+    case vk::Result::eErrorValidationFailed:
         return "A command failed because invalid usage was detected by the implementation or a validation layer. This may result in the command not being dispatched to the ICD.";
     case vk::Result::eErrorInvalidShaderNV:
         return "One or more shaders failed to compile or link. More details are reported back to the application via VK_EXT_debug_report if enabled.";
@@ -122,11 +115,11 @@ const char* VkResultHandler::GetResultDescription(const vk::Result result) {
         return "An image creation failed because internal resources required for compression are exhausted. This must only be returned when fixed-rate compression is requested.";
     case vk::Result::eIncompatibleShaderBinaryEXT:
         return "The provided binary shader code is not compatible with this device.";
-#ifndef SDL_PLATFORM_APPLE
-    case vk::Result:eErrorNotEnoughtSpaceKHR:
+    case vk::Result::eErrorNotEnoughSpaceKHR:
         return "The application did not provide enough space to return all the required data.";
-    case vk::Result:ePipelineBinaryMissingKHR:
+    case vk::Result::ePipelineBinaryMissingKHR:
         return "The application attempted to create a pipeline binary by querying an internal cache, but the internal cache entry did not exist.";
-#endif
+    case vk::Result::eErrorPresentTimingQueueFullEXT:
+        return ""; // TODO docs don't have this one
     }
 }

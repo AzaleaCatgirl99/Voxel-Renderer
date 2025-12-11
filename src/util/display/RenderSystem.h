@@ -10,8 +10,8 @@
 // Makes sure to remove constructors for structs.
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_core.h>
 #include "util/Logger.h"
-#include "util/display/device/VkDeviceHandler.h"
 #include "util/display/device/GPUDevice.h"
 #include <vector>
 
@@ -99,7 +99,7 @@ public:
             sDevice.destroyPipelineLayout(layout);
         }
 
-        
+
         vk::Pipeline pipeline;
         vk::PipelineLayout layout;
         vk::DescriptorSetLayout descriptorSetLayout;
@@ -170,14 +170,6 @@ public:
         return sDevice;
     }
 private:
-    static VXL_INLINE const vk::ApplicationInfo APP_INFO = {
-        .pApplicationName = VXL_PROJECT_NAME,
-        .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-        .pEngineName = "RenderSystem",
-        .engineVersion = VK_MAKE_VERSION(0, 1, 0),
-        .apiVersion = VK_API_VERSION_1_0
-    };
-
     static Settings sSettings;
 
     // Physical Device variables.
@@ -216,11 +208,10 @@ private:
     static std::vector<const char*> GetRequiredExtensions();
 #ifdef VXL_RENDERSYSTEM_DEBUG
     static bool CheckValidationLayerSupport();
-    // Annoyingly this needs to be placed here for it to be used in 'DEBUG_MESSENGER_INFO'.
-    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-        VkDebugUtilsMessageTypeFlagsEXT message_type,
-        const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    static VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugCallback(
+        vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity,
+        vk::DebugUtilsMessageTypeFlagsEXT message_type,
+        const vk::DebugUtilsMessengerCallbackDataEXT* callback_data,
         void* user_data);
     static void CreateDebugMessenger();
 #endif
