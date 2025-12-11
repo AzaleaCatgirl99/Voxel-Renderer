@@ -22,14 +22,6 @@ class VertexFormat;
 class RenderSystem final {
 public:
     static VXL_INLINE const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-#ifdef VXL_RENDERSYSTEM_DEBUG
-    static VXL_INLINE uint32_t LAYER_COUNT = 1;
-    static VXL_INLINE const char* LAYERS[LAYER_COUNT] = {
-        "VK_LAYER_KHRONOS_validation"
-    };
-    static PFN_vkCreateDebugUtilsMessengerEXT pfnVkCreateDebugUtilsMessengerEXT;
-    static PFN_vkDestroyDebugUtilsMessengerEXT pfnVkDestroyDebugUtilsMessengerEXT;
-#endif
 
     // Various different rendering swap intervals.
     // https://docs.vulkan.org/refpages/latest/refpages/source/VkPresentModeKHR.html
@@ -184,10 +176,6 @@ private:
     static vk::CommandPool sTransferCmdPool;
 
     static vk::Instance sInstance;
-#ifdef VXL_RENDERSYSTEM_DEBUG
-    static vk::DebugUtilsMessengerEXT sDebugMessenger;
-    static vk::DebugUtilsMessengerCreateInfoEXT sDebugCreateInfo;
-#endif
     static vk::SurfaceKHR sSurface;
     static vk::RenderPass sRenderPass;
     static uint32_t sCurrentFrame;
@@ -206,15 +194,6 @@ private:
 
     static void CreateInstance();
     static std::vector<const char*> GetRequiredExtensions();
-#ifdef VXL_RENDERSYSTEM_DEBUG
-    static bool CheckValidationLayerSupport();
-    static VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugCallback(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity,
-        vk::DebugUtilsMessageTypeFlagsEXT message_type,
-        const vk::DebugUtilsMessengerCallbackDataEXT* callback_data,
-        void* user_data);
-    static void CreateDebugMessenger();
-#endif
     static void CreateDevice();
     static void CreateRenderPass();
     static void CreateFramebuffers();

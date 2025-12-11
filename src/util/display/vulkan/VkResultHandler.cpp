@@ -3,7 +3,7 @@
 Logger VkResultHandler::sLogger = Logger("RenderSystem");
 
 void VkResultHandler::CheckResult(const vk::Result result, const char* error, std::optional<const char*> success) {
-#ifdef VXL_RENDERSYSTEM_DEBUG
+#ifdef VXL_DEBUG
     if (result == vk::Result::eSuccess) {
         if (success.has_value())
             sLogger.Info(success.value());
