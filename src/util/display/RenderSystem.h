@@ -194,7 +194,6 @@ private:
 
     static void CreateInstance();
     static std::vector<const char*> GetRequiredExtensions();
-    static void CreateDevice();
     static void CreateRenderPass();
     static void CreateFramebuffers();
     static void CreateCommandBuffer();

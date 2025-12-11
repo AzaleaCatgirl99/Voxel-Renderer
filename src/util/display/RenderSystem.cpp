@@ -14,6 +14,7 @@
 #include "util/display/device/SwapchainHandler.h"
 #include "util/display/Window.h"
 #include "util/display/vulkan/VkDebugger.h"
+#include "util/display/vulkan/VkInitializer.h"
 #include "util/display/vulkan/VkResultHandler.h"
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
@@ -59,7 +60,8 @@ void RenderSystem::Initialize(const Settings& settings) {
 #endif
     sSurface = Window::CreateSurface(sInstance);
     sGPU.Build(sInstance, sSurface);
-    CreateDevice();
+    sDevice = VkInitializer::CreateDevice(&sGPU, sGraphicsQueue, sPresentQueue,
+                            sTransferQueue, sGraphicsCmdPool, sTransferCmdPool);
     SwapchainHandler::Build(sDevice, &sGPU, sSurface, GetPresentMode(sSettings.swapInterval));
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -547,59 +549,6 @@ std::vector<const char*> RenderSystem::GetRequiredExtensions() {
 #endif
 
     return extensions;
-}
-
-void RenderSystem::CreateDevice() {
-    if (!sGPU.GetQueueFamilies()->graphics.has_value())
-        throw sLogger.RuntimeError("Failed to create logical device! No graphics family found.");
-
-    if (!sGPU.GetQueueFamilies()->present.has_value())
-        throw sLogger.RuntimeError("Failed to create logical device! No presentation family found.");
-
-    if (!sGPU.GetQueueFamilies()->transfer.has_value())
-        throw sLogger.RuntimeError("Failed to create logical device! No transfer family found.");
-
-    vk::DeviceQueueCreateInfo queueCreateInfos[sGPU.GetQueueFamilies()->UniqueSize()];
-    float queuePriority = 1.0f;
-
-    for (uint32_t i = 0; i < sGPU.GetQueueFamilies()->UniqueSize(); i++) {
-        queueCreateInfos[i] = {
-            .queueFamilyIndex = sGPU.GetQueueFamilies()->GetUnique(i),
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority
-        };
-    }
-
-    vk::PhysicalDeviceFeatures features = sGPU.GetFeatures();
-
-    vk::DeviceCreateInfo info = {
-        .queueCreateInfoCount = static_cast<uint32_t>(sGPU.GetQueueFamilies()->UniqueSize()),
-        .pQueueCreateInfos = queueCreateInfos,
-        .enabledExtensionCount = GPUDevice::EXTENSION_COUNT,
-        .ppEnabledExtensionNames = GPUDevice::EXTENSIONS.data(),
-        .pEnabledFeatures = &features
-    };
-
-    // TODO figure out how to clean up this code.
-    size_t queueIndicesSize = sGPU.GetQueueFamilies()->UniqueSize();
-
-    sDevice = sGPU.device.createDevice(info);
-
-    sGraphicsQueue = sDevice.getQueue(sGPU.GetQueueFamilies()->graphics.value(), 0);
-    sPresentQueue = sDevice.getQueue(sGPU.GetQueueFamilies()->present.value(), queueIndicesSize < 2 ? 0 : 1);
-
-    uint32_t transferIndex = queueIndicesSize < 2 ? 0 : queueIndicesSize < 3 ? 1 : queueIndicesSize - 1;
-    sTransferQueue = sDevice.getQueue(sGPU.GetQueueFamilies()->transfer.value(), transferIndex);
-
-    vk::CommandPoolCreateInfo cmdPoolInfo = {
-        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = sGPU.GetQueueFamilies()->graphics.value()
-    };
-
-    sGraphicsCmdPool = sDevice.createCommandPool(cmdPoolInfo);
-
-    cmdPoolInfo.queueFamilyIndex = sGPU.GetQueueFamilies()->transfer.value();
-    sTransferCmdPool = sDevice.createCommandPool(cmdPoolInfo);
 }
 
 void RenderSystem::CreateRenderPass() {

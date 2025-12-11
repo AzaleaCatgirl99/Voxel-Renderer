@@ -119,7 +119,9 @@ const char* VkResultHandler::GetResultDescription(const vk::Result result) {
         return "The application did not provide enough space to return all the required data.";
     case vk::Result::ePipelineBinaryMissingKHR:
         return "The application attempted to create a pipeline binary by querying an internal cache, but the internal cache entry did not exist.";
+#if VK_HEADER_VERSION > 328
     case vk::Result::eErrorPresentTimingQueueFullEXT:
-        return ""; // TODO docs don't have this one
+        return ""; // TODO docs don't have this one yet
+#endif
     }
 }
