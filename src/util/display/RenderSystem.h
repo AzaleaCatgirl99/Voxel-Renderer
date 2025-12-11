@@ -183,7 +183,6 @@ private:
     static vk::CommandBuffer sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
     static vk::Semaphore sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
     static vk::Fence sInFlightFences[MAX_FRAMES_IN_FLIGHT];
-    static uint32_t sImageIndex;
 
     static std::vector<vk::Semaphore> sRenderFinishedSemaphores;
     static std::vector<vk::Framebuffer> sFramebuffers;
