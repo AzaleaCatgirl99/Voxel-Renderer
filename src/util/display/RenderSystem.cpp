@@ -117,10 +117,15 @@ void RenderSystem::RecreateSwapchain() {
 
 void RenderSystem::UpdateDisplay() {
     vk::Result result = sDevice.waitForFences(1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
-    result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
 
     auto index = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, 0, sImageAvailableSemaphores[sCurrentFrame]);
-    VkResultHandler::CheckResult(index.result, "Failed to get image index!");
+    if (result == vk::Result::eErrorOutOfDateKHR) {
+        RecreateSwapchain();
+        return;
+    } else {
+        VkResultHandler::CheckResult(index.result, "Failed to get image index!");
+    }
+
     uint32_t imageIndex = index.value;
 
     result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
@@ -158,7 +163,10 @@ void RenderSystem::UpdateDisplay() {
     };
 
     result = sPresentQueue.presentKHR(&presentInfo);
-    VkResultHandler::CheckResult(result, "Failed to present to the present queue!");
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR)
+        RecreateSwapchain();
+    else
+        VkResultHandler::CheckResult(result, "Failed to present to the present queue!");
 
     // Advance to the next frame.
     sCurrentFrame = (sCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
