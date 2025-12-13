@@ -12,6 +12,7 @@ project(Voxel-Renderer
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 23)
 
+# Compile option needed for Highway SIMD
 add_compile_options(-march=native)
 
 # Default settings for the program
@@ -20,6 +21,14 @@ set(VXL_INFO_LOGGING ON)
 set(VXL_WARNING_LOGGING ON)
 set(VXL_ERROR_LOGGING ON)
 set(VXL_PROJECT_NAME "Voxel Renderer")
+
+# Directories used by the program
+set(VXL_TOOLS_DIR ${CMAKE_SOURCE_DIR}/tools)
+set(VXL_ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
+set(VXL_SHADERS_DIR ${CMAKE_SOURCE_DIR}/assets/shaders)
+set(VXL_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src)
+set(VXL_BUILD_ASSETS_DIR ${PROJECT_BINARY_DIR}/assets)
+set(VXL_BUILD_SHADERS_DIR ${PROJECT_BINARY_DIR}/assets/shaders)
 
 # Custom config settings to enable
 if (EXISTS config/config.cmake)
@@ -50,7 +59,7 @@ add_compile_definitions("VXL_INLINE=inline constexpr")
 # ========== Source Files & Executable ==========
 
 # Main app source
-file(GLOB_RECURSE CPP_FILES src/*.cpp)
+file(GLOB_RECURSE CPP_FILES ${VXL_SOURCE_DIR}/*.cpp)
 set(SRC ${CPP_FILES})
 
 # ImGUI for UI handling (this doesn't have a CMake config, so we have to add our own config)
@@ -103,35 +112,27 @@ target_include_directories(Voxel-Renderer PRIVATE lib/stb)
 
 # ========== Assets ==========
 
-# Deletes the assets dir in the build dir if it exists
-if (EXISTS "${PROJECT_BINARY_DIR}/assets")
-add_custom_command(TARGET Voxel-Renderer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove_directory "${PROJECT_BINARY_DIR}/assets"
+# Copies the assets folder from the root project directory to the build directory
+add_custom_target(CopyAssets
+    COMMAND ${CMAKE_COMMAND} -P ${VXL_TOOLS_DIR}/assets.cmake
 )
-endif ()
+add_dependencies(Voxel-Renderer CopyAssets)
 
-# Moves the assets dir to the build dir at post-build
-add_custom_command(TARGET Voxel-Renderer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/assets"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/assets "${PROJECT_BINARY_DIR}/assets"
-)
+# Gets the Slangc executable needed to convert Slang shader files
+set(SLANGC_EXE ${Vulkan_INCLUDE_DIR}/../bin/slangc)
 
-# Compile vertex shaders to Vulkan's binary format
-file(GLOB_RECURSE VERT_SHADER_FILES ${PROJECT_BINARY_DIR}/assets/shaders/*.vert)
-foreach (vert_file ${VERT_SHADER_FILES})
-    set(VERT_COMPILED_FILE ${vert_file})
-    string(REPLACE ".vert" "_vert.spv" VERT_COMPILED_FILE ${VERT_COMPILED_FILE})
+# Compile shaders to Vulkan's binary format (SPIRV-V)
+file(GLOB_RECURSE SHADER_FILES ${VXL_SHADERS_DIR}/*.slang)
+foreach (SHADER ${SHADER_FILES})
+    # Gets the file name needed for printing the comment on compilation
+    file(RELATIVE_PATH SHADER_NAME ${VXL_SHADERS_DIR} ${SHADER})
+
+    # Gets the file path for the compiled shader
+    string(REPLACE ".slang" ".spv" COMPILED_SHADER ${SHADER_NAME})
+    set(COMPILED_SHADER ${VXL_BUILD_SHADERS_DIR}/${COMPILED_SHADER})
+
     add_custom_command(TARGET Voxel-Renderer POST_BUILD
-        COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${vert_file} -o ${VERT_COMPILED_FILE}
-    )
-endforeach ()
-
-# Compile fragment shaders to Vulkan's binary format
-file(GLOB_RECURSE FRAG_SHADER_FILES ${PROJECT_BINARY_DIR}/assets/shaders/*.frag)
-foreach (frag_file ${FRAG_SHADER_FILES})
-    set(FRAG_COMPILED_FILE ${frag_file})
-    string(REPLACE ".frag" "_frag.spv" FRAG_COMPILED_FILE ${FRAG_COMPILED_FILE})
-    add_custom_command(TARGET Voxel-Renderer POST_BUILD
-        COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${frag_file} -o ${FRAG_COMPILED_FILE}
+        COMMAND ${SLANGC_EXE} ${SHADER} -target spirv -emit-spirv-via-glsl -emit-spirv-directly -o ${COMPILED_SHADER}
+        COMMAND ${CMAKE_COMMAND} -E echo "-- Compiling Slang shader \'${SHADER_NAME}\'"
     )
 endforeach ()
