@@ -4,6 +4,7 @@
 #include "renderer/CubeRenderer.h"
 #include "util/ImGUIHelper.h"
 #include "util/display/RenderSystem.h"
+#include "util/display/device/SwapchainHandler.h"
 #include "util/display/Window.h"
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
@@ -16,14 +17,16 @@ float App::sDeltaTime = 0.0f;
 float App::sLastFrame = 0.0f;
 
 void App::Run() {
+#ifdef VXL_TEST
     Test();
+#else
+    Init();
 
-    // Init();
+    while (sRunning)
+        MainLoop();
 
-    // while (sRunning)
-    //     MainLoop();
-
-    // Cleanup();
+    Cleanup();
+#endif
 }
 
 void App::Init() {
@@ -35,6 +38,9 @@ void App::Init() {
     };
 
     Window::Create("Voxel Renderer", mode);
+
+    // Set the mouse to be grabbed on boot.
+    Window::SetMouseGrabbed(true);
 
     RenderSystem::Settings rendererSettings = {
         .swapInterval = RenderSystem::SwapInterval::eVSync,
@@ -72,6 +78,23 @@ void App::MainLoop() {
 }
 
 void App::RenderLoop(vk::CommandBuffer& buffer) {
+    // Sets the dynamic viewport and scissor.
+    vk::Viewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(SwapchainHandler::sExtent.width),
+        .height = static_cast<float>(SwapchainHandler::sExtent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+    buffer.setViewport(0, 1, &viewport);
+
+    vk::Rect2D scissor = {
+        .offset = {0, 0},
+        .extent = SwapchainHandler::sExtent
+    };
+    buffer.setScissor(0, 1, &scissor);
+
     CubeRenderer::Settings cube = {
         .m_pos = {8.0f, 0.0f, 0.0f},
         .m_rot = {0.0f, -90.0f, 0.0f}

@@ -115,10 +115,11 @@ void SwapchainHandler::ChooseExtent(const vk::SurfaceCapabilitiesKHR& capabiliti
         return;
     }
 
+    glm::ivec2 windowSize = Window::GetDisplaySize();
     // Get the width and height of the window.
     VkExtent2D actualExtent = {
-        .width = static_cast<uint32_t>(Window::DisplayWidth()),
-        .height = static_cast<uint32_t>(Window::DisplayHeight())
+        .width = static_cast<uint32_t>(windowSize.x),
+        .height = static_cast<uint32_t>(windowSize.y)
     };
 
     // Clamp the values to be within the maximum capabilities for the extent.

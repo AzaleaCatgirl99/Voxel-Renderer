@@ -10,7 +10,6 @@ glm::mat4 Camera::sView;
 glm::vec3 Camera::sPosition = {0.0f, 0.0f, 0.0f};
 glm::vec3 Camera::sTarget = {0.0f, 0.0f, 0.0f};
 glm::vec3 Camera::sUp = {0.0f, 1.0f, 0.0f};
-bool Camera::sMouseGrabbed = true;
 glm::vec2 Camera::sLastPos;
 float Camera::sYaw = 0.0f;
 float Camera::sPitch = 0.0f;
@@ -19,8 +18,6 @@ float Camera::sFOV = 60.0f;
 float Camera::sSensitivity = 0.01f;
 
 void Camera::Update() {
-    Window::SetMouseGrabbed(sMouseGrabbed);
-
     if (sSpeed < 0.0f)
         sSpeed = 0.0f;
 
@@ -36,9 +33,9 @@ void Camera::Update() {
     sProjection = glm::perspective(glm::radians(sFOV), Window::ApsectRatio(), 0.1f, 10000.0f);
     sProjection[1][1] *= -1;
 
-    if (sMouseGrabbed) {
-        sLastPos = Window::MouseRelativePos();
-        glm::vec2 mousePos = Window::MouseRelativePos();
+    if (Window::IsMouseGrabbed()) {
+        sLastPos = Window::GetMouseRelativePos();
+        glm::vec2 mousePos = Window::GetMouseRelativePos();
 
         float x = sLastPos.x - mousePos.x;
         float y = mousePos.y - sLastPos.y;
@@ -55,7 +52,7 @@ void Camera::Update() {
         if (sPitch < -89.0f)
             sPitch = -89.0f;
 
-        Window::SetMousePosition(Window::Width() / 2.0f, Window::Height() / 2.0f);
+        Window::CenterMousePosition();
 
         glm::vec3 direction;
         direction.x = std::cos(glm::radians(sYaw)) * std::cos(glm::radians(sPitch));
@@ -63,7 +60,7 @@ void Camera::Update() {
         direction.z = std::sin(glm::radians(sYaw)) * std::cos(glm::radians(sPitch));
         sTarget = glm::normalize(direction);
 
-        const bool* keyStates = SDL_GetKeyboardState(nullptr);
+        const bool* keyStates = Window::GetKeyStates();
 
         if (keyStates[SDL_SCANCODE_W]) {
             sPosition.x += std::cos(glm::radians(sYaw)) * GetSpeed();
@@ -98,7 +95,7 @@ void Camera::Update() {
 void Camera::TickEvents() {
     if (Window::GetEvent()->type == SDL_EVENT_KEY_DOWN) {
         if (Window::GetEvent()->key.key == SDLK_ESCAPE)
-            sMouseGrabbed = !sMouseGrabbed;
+            Window::ToggleMouseGrabbed();
 
         if (Window::GetEvent()->key.key == SDLK_RIGHT)
             sSpeed += 0.01f;

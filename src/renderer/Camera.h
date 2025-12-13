@@ -42,7 +42,6 @@ private:
     static glm::vec3 sPosition;
     static glm::vec3 sTarget;
     static glm::vec3 sUp;
-    static bool sMouseGrabbed;
     static glm::vec2 sLastPos;
     static float sYaw;
     static float sPitch;

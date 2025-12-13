@@ -28,7 +28,7 @@ private:
     static const VertexFormat sVertexFormat;
     static RenderSystem::Pipeline sPipeline;
     static vk::DescriptorPool sDescPool;
-    static vk::DescriptorSet sDescSets[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+    static vk::DescriptorSet sDescSets[VXL_RS_MAX_FRAMES_IN_FLIGHT];
     static vk::Buffer sVBO;
     static vk::DeviceMemory sVBOMemory;
     static vk::Buffer sIBO;

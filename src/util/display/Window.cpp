@@ -8,6 +8,8 @@ SDL_Window* Window::sContext = nullptr;
 Logger Window::sLogger = Logger("Window");
 SDL_Event Window::sEvent;
 bool Window::sMinimized = false;
+bool Window::sMouseGrabbed = false;
+const bool* Window::sKeyStates = nullptr;
 
 void Window::Create(const char* title, const DisplayMode& mode) {
     // Initializes the the SDL3 video system, which is required for window management.
@@ -42,6 +44,21 @@ void Window::Create(const char* title, const DisplayMode& mode) {
         throw sLogger.RuntimeError("Failed to set the minimum size.");
 
     SDL_AddEventWatch(EventWatcher, nullptr);
+
+    sKeyStates = SDL_GetKeyboardState(nullptr);
+}
+
+void Window::SetMouseGrabbed(bool grabbed) {
+    if (sMouseGrabbed == grabbed)
+        return;
+
+    if (grabbed)
+        SDL_HideCursor();
+    else
+        SDL_ShowCursor();
+
+    SDL_SetWindowRelativeMouseMode(sContext, grabbed);
+    sMouseGrabbed = grabbed;
 }
 
 bool Window::EventWatcher(void* app_data, SDL_Event* event) {

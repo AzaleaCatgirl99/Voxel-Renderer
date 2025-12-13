@@ -9,10 +9,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-#include "util/BufferedFile.h"
 #include "util/display/device/GPUDevice.h"
 #include "util/display/device/SwapchainHandler.h"
 #include "util/display/Window.h"
+#include "util/display/vulkan/VkConversions.h"
 #include "util/display/vulkan/VkDebugger.h"
 #include "util/display/vulkan/VkInitializer.h"
 #include "util/display/vulkan/VkResultHandler.h"
@@ -20,7 +20,6 @@
 #include <backends/imgui_impl_vulkan.h>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_beta.h>
-#include "util/display/pipeline/VertexFormat.h"
 
 RenderSystem::Settings RenderSystem::sSettings;
 
@@ -36,19 +35,17 @@ vk::CommandPool RenderSystem::sTransferCmdPool;
 
 vk::Instance RenderSystem::sInstance;
 vk::SurfaceKHR RenderSystem::sSurface;
-vk::RenderPass RenderSystem::sRenderPass;
+vk::RenderPass RenderSystem::sDefaultRenderPass;
 uint32_t RenderSystem::sCurrentFrame = 0;
 
-vk::CommandBuffer RenderSystem::sCommandBuffers[MAX_FRAMES_IN_FLIGHT];
-vk::Semaphore RenderSystem::sImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
-vk::Fence RenderSystem::sInFlightFences[MAX_FRAMES_IN_FLIGHT];
+vk::CommandBuffer RenderSystem::sCommandBuffers[VXL_RS_MAX_FRAMES_IN_FLIGHT];
+vk::Semaphore RenderSystem::sImageAvailableSemaphores[VXL_RS_MAX_FRAMES_IN_FLIGHT];
+vk::Fence RenderSystem::sInFlightFences[VXL_RS_MAX_FRAMES_IN_FLIGHT];
 
 std::vector<vk::Semaphore> RenderSystem::sRenderFinishedSemaphores;
 std::vector<vk::Framebuffer> RenderSystem::sFramebuffers;
 
 Logger RenderSystem::sLogger = Logger("RenderSystem");
-
-vk::ClearValue RenderSystem::sClearColor = {{{{0.0f, 0.0f, 0.0f, 1.0f}}}};
 
 void RenderSystem::Initialize(const Settings& settings) {
     sSettings = settings;
@@ -61,18 +58,18 @@ void RenderSystem::Initialize(const Settings& settings) {
     sGPU.Build(sInstance, sSurface);
     sDevice = VkInitializer::CreateDevice(&sGPU, sGraphicsQueue, sPresentQueue,
                             sTransferQueue, sGraphicsCmdPool, sTransferCmdPool);
-    SwapchainHandler::Build(sDevice, &sGPU, sSurface, GetPresentMode(sSettings.swapInterval));
+    SwapchainHandler::Build(sDevice, &sGPU, sSurface, VkConversions::GetPresentMode(sSettings.swapInterval));
 
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    for (uint32_t i = 0; i < VXL_RS_MAX_FRAMES_IN_FLIGHT; i++)
         sCommandBuffers[i] = CreateCmdBuffer();
 
-    CreateRenderPass();
+    sDefaultRenderPass = VkInitializer::CreateSimpleRenderPass(sDevice);
     CreateFramebuffers();
     CreateSyncObjects();
 }
 
 void RenderSystem::Destroy() {
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    for (size_t i = 0; i < VXL_RS_MAX_FRAMES_IN_FLIGHT; i++) {
         sDevice.destroySemaphore(sImageAvailableSemaphores[i]);
         sDevice.destroyFence(sInFlightFences[i]);
     }
@@ -83,7 +80,7 @@ void RenderSystem::Destroy() {
     for (auto framebuffer : sFramebuffers)
         sDevice.destroyFramebuffer(framebuffer);
 
-    sDevice.destroyRenderPass(sRenderPass);
+    sDevice.destroyRenderPass(sDefaultRenderPass);
 
     SwapchainHandler::Delete(sDevice);
 
@@ -110,7 +107,7 @@ void RenderSystem::RecreateSwapchain() {
     for (auto framebuffer : sFramebuffers)
         sDevice.destroyFramebuffer(framebuffer);
 
-    SwapchainHandler::Rebuild(sDevice, &sGPU, sSurface, GetPresentMode(sSettings.swapInterval));
+    SwapchainHandler::Rebuild(sDevice, &sGPU, sSurface, VkConversions::GetPresentMode(sSettings.swapInterval));
 
     CreateFramebuffers();
 }
@@ -169,18 +166,7 @@ void RenderSystem::UpdateDisplay() {
         VkResultHandler::CheckResult(result, "Failed to present to the present queue!");
 
     // Advance to the next frame.
-    sCurrentFrame = (sCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-std::vector<vk::CommandBuffer> RenderSystem::CreateCmdBuffers(uint32_t count, std::optional<vk::CommandPool> pool) {
-    vk::CommandBufferAllocateInfo info = {
-        .commandPool = pool.has_value() ? pool.value() : sGraphicsCmdPool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = count
-    };
-
-    // Annoyingly HPP won't allow the use of just normal pointers for data.
-    return sDevice.allocateCommandBuffers(info);
+    sCurrentFrame = (sCurrentFrame + 1) % VXL_RS_MAX_FRAMES_IN_FLIGHT;
 }
 
 vk::CommandBuffer RenderSystem::CreateCmdBuffer(std::optional<vk::CommandPool> pool) {
@@ -223,39 +209,10 @@ void RenderSystem::EndDataTransfer(vk::CommandBuffer& buffer) {
     sDevice.freeCommandBuffers(sTransferCmdPool, 1, &buffer);
 }
 
-vk::Buffer RenderSystem::CreateBuffer(vk::SharingMode mode, uint32_t size, vk::BufferCreateFlags flags, vk::BufferUsageFlags usages) {
-    vk::BufferCreateInfo info = {
-        .flags = flags,
-        .size = size,
-        .usage = usages,
-        .sharingMode = mode
-    };
-
-    return sDevice.createBuffer(info);
-}
-
-vk::Buffer RenderSystem::CreateVertexBuffer(vk::DeviceSize size, const VertexFormat format) {
-    return CreateBuffer(
-        sGPU.GetQueueFamilies()->IsSame() ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent,
-        size * format.GetStride(), {}, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst);
-}
-
-vk::Buffer RenderSystem::CreateIndexBuffer(vk::DeviceSize size, vk::IndexType type) {
-    return CreateBuffer(
-        sGPU.GetQueueFamilies()->IsSame() ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent,
-        size * GetIndexTypeSize(type), {}, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst);
-}
-
-vk::Buffer RenderSystem::CreateStorageBuffer(vk::DeviceSize size) {
-    return CreateBuffer(
-        sGPU.GetQueueFamilies()->IsSame() ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent,
-        size, {}, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst);
-}
-
 RenderSystem::UBO RenderSystem::CreateUniformBuffer(vk::DeviceSize size) {
     UBO ubo;
     
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    for (uint32_t i = 0; i < VXL_RS_MAX_FRAMES_IN_FLIGHT; i++) {
         ubo.size = size;
 
         ubo.buffers[i] = CreateBuffer(vk::SharingMode::eExclusive, size, {}, vk::BufferUsageFlagBits::eUniformBuffer);
@@ -311,181 +268,6 @@ void RenderSystem::CopyBuffer(vk::Buffer& dst, vk::Buffer& src, vk::DeviceSize s
     buffer.copyBuffer(src, dst, copyRegion);
 
     EndDataTransfer(buffer);
-}
-
-RenderSystem::Pipeline RenderSystem::CreatePipeline(Pipeline::Info& info) {
-    Pipeline pipeline;
-
-    vk::ShaderModule vertShaderModule = CreateShader(info.vertexShaderPath.c_str());
-    vk::ShaderModule fragShaderModule = CreateShader(info.fragmentShaderPath.c_str());
-
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo = {
-        .stage = vk::ShaderStageFlagBits::eVertex,
-        .module = vertShaderModule,
-        .pName = "VertexMain"
-    };
-
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo = {
-        .stage = vk::ShaderStageFlagBits::eFragment,
-        .module = fragShaderModule,
-        .pName = "PixelMain"
-    };
-
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-    vk::PipelineDynamicStateCreateInfo dynamicStateInfo = {
-        .dynamicStateCount = info.dynamicStateCount,
-        .pDynamicStates = info.dynamicStates
-    };
-
-    // Checks whether the pipeline has a vertex format. If it does, then it'll setup the binding and attribute descriptions.
-    vk::VertexInputBindingDescription vertexBindingDesc;
-    std::vector<vk::VertexInputAttributeDescription> vertexAttribDescs;
-    if (info.useVertexFormat) {
-        vertexBindingDesc = {
-            .binding = 0,
-            .stride = static_cast<uint32_t>(info.vertexFormat->GetStride()),
-            .inputRate = vk::VertexInputRate::eVertex // TODO this needs to change to setup instance rendering.
-        };
-
-        uint32_t offset = 0;
-        for (uint32_t i = 0; i < info.vertexFormat->GetElementsSize(); i++) {
-            vk::VertexInputAttributeDescription desc = {
-                .location = i,
-                .binding = 0,
-                .format = GetTypeFormat(info.vertexFormat->GetElements()[i].type),
-                .offset = offset
-            };
-
-            vertexAttribDescs.push_back(desc);
-
-            offset += GetDataTypeSize(info.vertexFormat->GetElements()[i].type);
-        }
-    }
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo = {
-        .vertexBindingDescriptionCount = info.useVertexFormat ? 1u : 0u,
-        .pVertexBindingDescriptions = info.useVertexFormat ? &vertexBindingDesc : VK_NULL_HANDLE,
-        .vertexAttributeDescriptionCount = info.useVertexFormat ? static_cast<uint32_t>(vertexAttribDescs.size()) : 0u,
-        .pVertexAttributeDescriptions = info.useVertexFormat ? vertexAttribDescs.data() : VK_NULL_HANDLE,
-    };
-
-    vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-        .topology = info.topology,
-        .primitiveRestartEnable = VK_FALSE
-    };
-
-    vk::PipelineViewportStateCreateInfo viewportStateInfo = {
-        .viewportCount = 1, // Only need 1 viewport and scissor.
-        .pViewports = &info.viewport,
-        .scissorCount = 1,
-        .pScissors = &info.scissor
-    };
-
-    vk::PipelineMultisampleStateCreateInfo multisamplingInfo = {
-        .rasterizationSamples = vk::SampleCountFlagBits::e1,
-        .sampleShadingEnable = VK_FALSE,
-        .minSampleShading = 1.0f,
-        .pSampleMask = VK_NULL_HANDLE,
-        .alphaToCoverageEnable = VK_FALSE,
-        .alphaToOneEnable = VK_FALSE,
-    };
-
-    vk::PipelineColorBlendAttachmentState colorBlendAttachmentInfo = {
-        .blendEnable = info.blending ? VK_TRUE : VK_FALSE,
-        .srcColorBlendFactor = info.colorSrcFactor,
-        .dstColorBlendFactor = info.colorDstFactor,
-        .colorBlendOp = vk::BlendOp::eAdd,
-        .srcAlphaBlendFactor = info.alphaSrcFactor,
-        .dstAlphaBlendFactor = info.alphaDstFactor,
-        .alphaBlendOp = vk::BlendOp::eAdd,
-        .colorWriteMask = 
-            vk::ColorComponentFlagBits::eR |
-            vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB |
-            vk::ColorComponentFlagBits::eA
-    };
-
-    vk::PipelineColorBlendStateCreateInfo colorBlendingInfo = {
-        .logicOpEnable = VK_FALSE,
-        .logicOp = vk::LogicOp::eCopy,
-        .attachmentCount = 1,
-        .pAttachments = &colorBlendAttachmentInfo
-    };
-    colorBlendingInfo.blendConstants[0] = 0.0f;
-    colorBlendingInfo.blendConstants[1] = 0.0f;
-    colorBlendingInfo.blendConstants[2] = 0.0f;
-    colorBlendingInfo.blendConstants[3] = 0.0f;
-
-    vk::Result result;
-    bool useDescriptorSets = info.bindingCount > 0 && info.bindings;
-    if (useDescriptorSets) {
-        vk::DescriptorSetLayoutCreateInfo layoutInfo = {
-            .bindingCount = info.bindingCount,
-            .pBindings = info.bindings
-        };
-
-        pipeline.descriptorSetLayout = sDevice.createDescriptorSetLayout(layoutInfo);
-    }
-
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {
-        .setLayoutCount = useDescriptorSets ? 1u : 0u,
-        .pSetLayouts = useDescriptorSets ? &pipeline.descriptorSetLayout : VK_NULL_HANDLE,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = VK_NULL_HANDLE
-    };
-
-    pipeline.layout = sDevice.createPipelineLayout(pipelineLayoutInfo);
-
-    vk::PipelineRasterizationStateCreateInfo rasterizerInfo = {
-        .depthClampEnable = VK_FALSE, // Discard off-screen fragments, do not clamp.
-        .rasterizerDiscardEnable = VK_FALSE,
-        .polygonMode = info.polygonMode,
-        .cullMode = info.cullMode,
-        .frontFace = vk::FrontFace::eClockwise,
-        .depthBiasEnable = VK_FALSE,
-        .depthBiasConstantFactor = 0.0f,
-        .depthBiasClamp = 0.0f,
-        .depthBiasSlopeFactor = 0.0f,
-        .lineWidth = 1.0f
-    };
-
-    vk::GraphicsPipelineCreateInfo pipelineInfo = {
-        .stageCount = 2,
-        .pStages = shaderStages,
-        .pVertexInputState = &vertexInputInfo,
-        .pInputAssemblyState = &inputAssemblyInfo,
-        .pViewportState = &viewportStateInfo,
-        .pRasterizationState = &rasterizerInfo,
-        .pMultisampleState = &multisamplingInfo,
-        .pDepthStencilState = VK_NULL_HANDLE,
-        .pColorBlendState = &colorBlendingInfo,
-        .pDynamicState = &dynamicStateInfo,
-        .layout = pipeline.layout,
-        .renderPass = sRenderPass,
-        .subpass = 0,
-        .basePipelineHandle = VK_NULL_HANDLE,
-        .basePipelineIndex = -1
-    };
-
-    auto res = sDevice.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
-    VkResultHandler::CheckResult(res.result, "Failed to create graphics pipeline!");
-    pipeline.pipeline = res.value;
-
-    sDevice.destroyShaderModule(fragShaderModule);
-    sDevice.destroyShaderModule(vertShaderModule);
-
-    return pipeline;
-}
-
-vk::DescriptorPool RenderSystem::CreateDescriptorPool(vk::DescriptorPoolSize* sizes, uint32_t size_count, uint32_t sets) {
-    vk::DescriptorPoolCreateInfo info = {
-        .maxSets = sets,
-        .poolSizeCount = size_count,
-        .pPoolSizes = sizes
-    };
-
-    return sDevice.createDescriptorPool(info);
 }
 
 void RenderSystem::CreateDescriptorSets(vk::DescriptorSet* sets, uint32_t count, vk::DescriptorPool& pool, vk::DescriptorSetLayout* layouts) {
@@ -558,57 +340,12 @@ std::vector<const char*> RenderSystem::GetRequiredExtensions() {
     return extensions;
 }
 
-void RenderSystem::CreateRenderPass() {
-    vk::AttachmentDescription colorAttachment = {
-        .format = SwapchainHandler::sImageFormat,
-        .samples = vk::SampleCountFlagBits::e1,
-        .loadOp = vk::AttachmentLoadOp::eClear,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-        .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
-        .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
-        .initialLayout = vk::ImageLayout::eUndefined,
-        .finalLayout = vk::ImageLayout::ePresentSrcKHR
-    };
-
-    vk::AttachmentReference colorAttachmentRef = {
-        .attachment = 0,
-        .layout = vk::ImageLayout::eColorAttachmentOptimal
-    };
-
-    vk::SubpassDescription subpass = {
-        .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef
-    };
-
-    vk::SubpassDependency dependency = {
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        .dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        .srcAccessMask = vk::AccessFlagBits::eNone,
-        .dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite
-    };
-
-    vk::RenderPassCreateInfo createInfo = {
-        .attachmentCount = 1,
-        .pAttachments = &colorAttachment,
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-        .dependencyCount = 1,
-        .pDependencies = &dependency
-    };
-
-    sRenderPass = sDevice.createRenderPass(createInfo);
-    sLogger.Info("Created Render pass.");
-}
-
 void RenderSystem::CreateFramebuffers() {
     sFramebuffers.resize(SwapchainHandler::sViews.size());
 
     for (size_t i = 0; i < sFramebuffers.size(); i++) {
         vk::FramebufferCreateInfo info = {
-            .renderPass = sRenderPass,
+            .renderPass = sDefaultRenderPass,
             .attachmentCount = 1,
             .pAttachments = &SwapchainHandler::sViews[i],
             .width = SwapchainHandler::sExtent.width,
@@ -629,7 +366,7 @@ void RenderSystem::CreateSyncObjects() {
         .flags = vk::FenceCreateFlagBits::eSignaled
     };
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    for (size_t i = 0; i < VXL_RS_MAX_FRAMES_IN_FLIGHT; i++) {
         sImageAvailableSemaphores[i] = sDevice.createSemaphore(semaphoreCreateInfo);
         sInFlightFences[i] = sDevice.createFence(fenceCreateInfo);
     }
@@ -645,9 +382,11 @@ void RenderSystem::BeginRecordCmdBuffer(vk::CommandBuffer& commandBuffer, uint32
 
     commandBuffer.begin(beginInfo);
 
+    vk::ClearValue color = {{{{0.0f, 0.0f, 0.0f, 1.0f}}}};
+
     // Start drawing by beginning a render pass.
     vk::RenderPassBeginInfo renderPassInfo = {
-        .renderPass = sRenderPass,
+        .renderPass = sDefaultRenderPass,
         .framebuffer = sFramebuffers[imageIndex],
         // Keep the render area the same size as the images for the best performance.
         .renderArea = {
@@ -655,88 +394,8 @@ void RenderSystem::BeginRecordCmdBuffer(vk::CommandBuffer& commandBuffer, uint32
             .extent = SwapchainHandler::sExtent
         },
         .clearValueCount = 1,
-        .pClearValues = &sClearColor
+        .pClearValues = &color
     };
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-    // Sets the dynamic viewport and scissor.
-    vk::Viewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = static_cast<float>(SwapchainHandler::sExtent.width),
-        .height = static_cast<float>(SwapchainHandler::sExtent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-    };
-    commandBuffer.setViewport(0, 1, &viewport);
-
-    vk::Rect2D scissor = {
-        .offset = {0, 0},
-        .extent = SwapchainHandler::sExtent
-    };
-    commandBuffer.setScissor(0, 1, &scissor);
-}
-
-vk::ShaderModule RenderSystem::CreateShader(const char* path) {
-    BufferedFile file = BufferedFile::Read(path, true);
-
-    vk::ShaderModuleCreateInfo info = {
-        .codeSize = file.Size(),
-        .pCode = file.DataAsUInt32()
-    };
-
-    return sDevice.createShaderModule(info);
-}
-
-uint32_t RenderSystem::GetIndexTypeSize(vk::IndexType type) {
-    switch (type) {
-    case vk::IndexType::eUint16:
-        return sizeof(uint16_t);
-    case vk::IndexType::eUint32:
-        return sizeof(uint32_t);
-    case vk::IndexType::eNoneKHR:
-        return 0;
-    case vk::IndexType::eUint8KHR:
-        return sizeof(uint8_t);
-    }
-}
-
-vk::PresentModeKHR RenderSystem::GetPresentMode(SwapInterval interval) {
-    switch (interval) {
-    case SwapInterval::eImmediate:
-        return vk::PresentModeKHR::eImmediate;
-    case SwapInterval::eVSync:
-        return vk::PresentModeKHR::eFifo;
-    case SwapInterval::eTripleBuffering:
-        return vk::PresentModeKHR::eMailbox;
-    }
-}
-
-vk::Format RenderSystem::GetTypeFormat(DataType type) {
-    switch (type) {
-    case DataType::eVec2:
-        return vk::Format::eR32G32Sfloat;
-    case DataType::eVec3:
-        return vk::Format::eR32G32B32Sfloat;
-    case DataType::eVec4:
-        return vk::Format::eR32G32B32A32Sfloat;
-    case DataType::eMat2:
-        return vk::Format::eUndefined; // TODO figure out this one
-    case DataType::eMat3:
-        return vk::Format::eUndefined; // TODO figure out this one
-    case DataType::eMat4:
-        return vk::Format::eUndefined; // TODO figure out this one
-    case DataType::eFloat:
-        return vk::Format::eR32Sfloat;
-    case DataType::eDouble:
-        return vk::Format::eR64Sfloat;
-    case DataType::eInt:
-        return vk::Format::eR32Sint;
-    case DataType::eUint:
-        return vk::Format::eR32Sint;
-    case DataType::eInt16:
-    case DataType::eUint16:
-        return vk::Format::eUndefined;
-    }
 }

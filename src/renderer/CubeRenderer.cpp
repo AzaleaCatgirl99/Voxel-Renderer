@@ -1,6 +1,5 @@
 #include "renderer/CubeRenderer.h"
 
-#include <SDL3/SDL_filesystem.h>
 #include <cstddef>
 #include <cstdio>
 #include <glm/ext.hpp>
@@ -15,7 +14,7 @@ const VertexFormat CubeRenderer::sVertexFormat = VertexFormat()
                             .Element(DataType::eVec4);
 RenderSystem::Pipeline CubeRenderer::sPipeline;
 vk::DescriptorPool CubeRenderer::sDescPool;
-vk::DescriptorSet CubeRenderer::sDescSets[RenderSystem::MAX_FRAMES_IN_FLIGHT];
+vk::DescriptorSet CubeRenderer::sDescSets[VXL_RS_MAX_FRAMES_IN_FLIGHT];
 vk::Buffer CubeRenderer::sVBO;
 vk::DeviceMemory CubeRenderer::sVBOMemory;
 vk::Buffer CubeRenderer::sIBO;
@@ -35,9 +34,24 @@ void CubeRenderer::Initialize() {
         .stageFlags = vk::ShaderStageFlagBits::eVertex
     };
 
+    vk::ShaderModule shader = RenderSystem::CreateShader(App::GetRootPath() + "assets/shaders/test.spv");
+    vk::PipelineShaderStageCreateInfo shaderStages[2];
+
+    shaderStages[0] = {
+        .stage = vk::ShaderStageFlagBits::eVertex,
+        .module = shader,
+        .pName = "VertexMain"
+    };
+
+    shaderStages[1] = {
+        .stage = vk::ShaderStageFlagBits::eFragment,
+        .module = shader,
+        .pName = "PixelMain"
+    };
+
     RenderSystem::Pipeline::Info info = {
-        .vertexShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test.spv",
-        .fragmentShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test.spv",
+        .shaderStages = shaderStages,
+        .shaderStageCount = 2,
         .topology = vk::PrimitiveTopology::eTriangleList,
         .blending = true,
         .colorSrcFactor = vk::BlendFactor::eOne,
@@ -54,20 +68,21 @@ void CubeRenderer::Initialize() {
     };
 
     sPipeline = RenderSystem::CreatePipeline(info);
+    RenderSystem::DestroyShader(shader);
 
     vk::DescriptorPoolSize poolSizes[1];
     poolSizes[0] = {
         .type = vk::DescriptorType::eUniformBuffer,
-        .descriptorCount = RenderSystem::MAX_FRAMES_IN_FLIGHT
+        .descriptorCount = VXL_RS_MAX_FRAMES_IN_FLIGHT
     };
 
-    sDescPool = RenderSystem::CreateDescriptorPool(poolSizes, 1, RenderSystem::MAX_FRAMES_IN_FLIGHT);
-    vk::DescriptorSetLayout layouts[RenderSystem::MAX_FRAMES_IN_FLIGHT] = {sPipeline.descriptorSetLayout, sPipeline.descriptorSetLayout};
-    RenderSystem::CreateDescriptorSets(sDescSets, RenderSystem::MAX_FRAMES_IN_FLIGHT, sDescPool, layouts);
+    sDescPool = RenderSystem::CreateDescriptorPool(poolSizes, 1, VXL_RS_MAX_FRAMES_IN_FLIGHT);
+    vk::DescriptorSetLayout layouts[VXL_RS_MAX_FRAMES_IN_FLIGHT] = {sPipeline.descriptorSetLayout, sPipeline.descriptorSetLayout};
+    RenderSystem::CreateDescriptorSets(sDescSets, VXL_RS_MAX_FRAMES_IN_FLIGHT, sDescPool, layouts);
 
-    vk::WriteDescriptorSet descriptorWrites[RenderSystem::MAX_FRAMES_IN_FLIGHT];
-    vk::DescriptorBufferInfo bufferInfos[RenderSystem::MAX_FRAMES_IN_FLIGHT];
-    for (size_t i = 0; i < RenderSystem::MAX_FRAMES_IN_FLIGHT; i++) {
+    vk::WriteDescriptorSet descriptorWrites[VXL_RS_MAX_FRAMES_IN_FLIGHT];
+    vk::DescriptorBufferInfo bufferInfos[VXL_RS_MAX_FRAMES_IN_FLIGHT];
+    for (size_t i = 0; i < VXL_RS_MAX_FRAMES_IN_FLIGHT; i++) {
         bufferInfos[i] = {
             .buffer = sUBO.buffers[i],
             .offset = 0,
@@ -84,7 +99,7 @@ void CubeRenderer::Initialize() {
         };
     }
 
-    RenderSystem::GetDevice().updateDescriptorSets(RenderSystem::MAX_FRAMES_IN_FLIGHT, descriptorWrites, 0, VK_NULL_HANDLE);
+    RenderSystem::UpdateDescriptorSets(VXL_RS_MAX_FRAMES_IN_FLIGHT, descriptorWrites);
 
     sVBO = RenderSystem::CreateVertexBuffer(24, sVertexFormat);
     sVBOMemory = RenderSystem::CreateMemory(sVBO, vk::MemoryPropertyFlagBits::eDeviceLocal);
@@ -166,16 +181,16 @@ void CubeRenderer::Initialize() {
 }
 
 void CubeRenderer::Destroy() {
-    RenderSystem::GetDevice().freeMemory(sVBOMemory);
-    RenderSystem::GetDevice().freeMemory(sIBOMemory);
+    RenderSystem::FreeMemory(sVBOMemory);
+    RenderSystem::FreeMemory(sIBOMemory);
 
-    RenderSystem::GetDevice().destroyBuffer(sVBO);
-    RenderSystem::GetDevice().destroyBuffer(sIBO);
-    sUBO.Destroy();
+    RenderSystem::DestroyBuffer(sVBO);
+    RenderSystem::DestroyBuffer(sIBO);
+    RenderSystem::DestroyUniformBuffer(sUBO);
 
-    RenderSystem::GetDevice().destroyDescriptorPool(sDescPool);
+    RenderSystem::DestroyDescriptorPool(sDescPool);
 
-    sPipeline.Destroy();
+    RenderSystem::DestroyPipeline(sPipeline);
 }
 
 void CubeRenderer::Draw(vk::CommandBuffer& buffer, const Settings& settings) {
@@ -191,7 +206,7 @@ void CubeRenderer::Draw(vk::CommandBuffer& buffer, const Settings& settings) {
         .mvp = Camera::GetProj() * Camera::GetView() * model
     };
 
-    sUBO.Update(&params);
+    RenderSystem::UpdateUniformBuffer(sUBO, &params);
 
     buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, sPipeline.layout, 0, 1, &sDescSets[RenderSystem::GetCurrentFrame()], 0, VK_NULL_HANDLE);
     buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, sPipeline);

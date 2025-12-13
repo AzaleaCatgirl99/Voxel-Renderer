@@ -1,12 +1,12 @@
 #pragma once
 
+#include <glm/glm.hpp>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_vulkan.h>
-#include <glm/glm.hpp>
 // Makes sure to remove constructors for structs.
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
@@ -28,41 +28,59 @@ struct DisplayMode final {
 // Utility for handling window management.
 class Window final {
 public:
+
+    // ========== Create & Destroy ==========
+
     static void Create(const char* title, const DisplayMode& mode);
 
-    // Gets the window width.
-    static VXL_INLINE const int Width() {
-        int width = 0;
-        SDL_GetWindowSize(sContext, &width, nullptr);
-        return width;
+    // Destroys the window.
+    static VXL_INLINE void Destroy() {
+        SDL_DestroyWindow(sContext);
+        SDL_Quit();
     }
 
-    // Gets the window height.
-    static VXL_INLINE const int Height() {
-        int height = 0;
-        SDL_GetWindowSize(sContext, nullptr, &height);
-        return height;
+    // ========== Main Getters ==========
+
+    // Gets the SDL window context.
+    static VXL_INLINE SDL_Window* GetContext() noexcept {
+        return sContext;
     }
 
-    // Gets the window width with the DPI.
-    static VXL_INLINE const int DisplayWidth() {
-        return (int)(Width() * DPIScale());
+    // Checks if the window is minimized.
+    static VXL_INLINE const bool IsMinimized() noexcept {
+        return sMinimized;
     }
 
-    // Gets the window height with the DPI.
-    static VXL_INLINE const int DisplayHeight() {
-        return (int)(Height() * DPIScale());
+    // ========== Property Getters ==========
+
+    // Gets the window size.
+    static VXL_INLINE const glm::ivec2 GetSize() {
+        glm::ivec2 size;
+        SDL_GetWindowSize(sContext, &size.x, &size.y);
+        return size;
+    }
+
+    // Gets the window size with the DPI.
+    static VXL_INLINE const glm::ivec2 GetDisplaySize() {
+        glm::ivec2 size = GetSize();
+        size.x *= GetDPIScale();
+        size.y *= GetDPIScale();
+
+        return size;
     }
 
     // Gets the scale for the DPI.
-    static VXL_INLINE const float DPIScale() {
+    static VXL_INLINE const float GetDPIScale() {
         return SDL_GetWindowDisplayScale(sContext);
     }
 
     // Gets the window's aspect ratio.
     static VXL_INLINE const float ApsectRatio() {
-        return (float)Width() / (float)Height();
+        const glm::ivec2 size = GetSize();
+        return (float)size.x / (float)size.y;
     }
+
+    // ========== Property Setters ==========
 
     // Sets the window to fullscreen.
     static VXL_INLINE void SetFullscreen(bool toggle) {
@@ -74,11 +92,7 @@ public:
         SDL_SetWindowTitle(sContext, title);
     }
 
-    // Destroys the window.
-    static VXL_INLINE void Destroy() {
-        SDL_DestroyWindow(sContext);
-        SDL_Quit();
-    }
+    // ========== Event & Input ==========
 
     // Gets the current SDL event.
     static VXL_INLINE const SDL_Event* GetEvent() noexcept {
@@ -90,55 +104,50 @@ public:
         return SDL_PollEvent(&sEvent);
     }
 
-    // Gets the mouse's X position.
-    static VXL_INLINE const float MouseX() {
-        float x;
-        SDL_GetMouseState(&x, nullptr);
-        return x;
-    }
-
-    // Gets the mouse's Y position.
-    static VXL_INLINE const float MouseY() {
-        float y;
-        SDL_GetMouseState(nullptr, &y);
-        return y;
-    }
-
-    // Gets the mouse's relative X position.
-    static VXL_INLINE const float MouseRelativeX() {
-        float x;
-        SDL_GetRelativeMouseState(&x, nullptr);
-        return x;
-    }
-
-    // Gets the mouse's relative Y position.
-    static VXL_INLINE const float MouseRelativeY() {
-        float y;
-        SDL_GetRelativeMouseState(nullptr, &y);
-        return y;
+    // Gets the mouse's position.
+    static VXL_INLINE const glm::vec2 GetMousePos() {
+        glm::vec2 pos;
+        SDL_GetMouseState(&pos.x, &pos.y);
+        return pos;
     }
 
     // Gets the mouse's relative position.
-    static VXL_INLINE const glm::vec2 MouseRelativePos() {
-        glm::vec2 ret;
-        SDL_GetRelativeMouseState(&ret.x, &ret.y);
-        return ret;
+    static VXL_INLINE const glm::vec2 GetMouseRelativePos() {
+        glm::vec2 pos;
+        SDL_GetRelativeMouseState(&pos.x, &pos.y);
+        return pos;
     }
 
     // Sets the mouse as grabbed by the window.
-    static VXL_INLINE void SetMouseGrabbed(bool grabbed) {
-        if (grabbed)
-            SDL_HideCursor();
-        else
-            SDL_ShowCursor();
+    static void SetMouseGrabbed(bool grabbed);
 
-        SDL_SetWindowRelativeMouseMode(sContext, grabbed);
+    // Checks if the mouse is grabbed by the window or not.
+    static VXL_INLINE const bool IsMouseGrabbed() noexcept {
+        return sMouseGrabbed;
+    }
+
+    // Toggles the mouse grabbing.
+    static VXL_INLINE void ToggleMouseGrabbed() {
+        SetMouseGrabbed(!sMouseGrabbed);
     }
 
     // Sets the mouse position.
     static VXL_INLINE void SetMousePosition(float x, float y) {
         SDL_WarpMouseInWindow(sContext, x, y);
     }
+
+    // Centers the mouse position.
+    static VXL_INLINE void CenterMousePosition() {
+        glm::ivec2 size = GetSize();
+        SDL_WarpMouseInWindow(sContext, size.x / 2.0f, size.y / 2.0f);
+    }
+
+    // Gets the key states.
+    static VXL_INLINE const bool* GetKeyStates() noexcept {
+        return sKeyStates;
+    }
+
+    // ========== Surface & Rendering ==========
 
     // Creates a Vulkan window surface.
     static VXL_INLINE vk::SurfaceKHR CreateSurface(vk::Instance& instance) {
@@ -153,16 +162,6 @@ public:
     static VXL_INLINE void DestroySurface(vk::Instance& instance, vk::SurfaceKHR& surface) {
         SDL_Vulkan_DestroySurface(instance, surface, VK_NULL_HANDLE);
     }
-
-    // Gets the SDL window context.
-    static VXL_INLINE SDL_Window* GetContext() noexcept {
-        return sContext;
-    }
-
-    // Checks if the window is minimized.
-    static VXL_INLINE const bool IsMinimized() noexcept {
-        return sMinimized;
-    }
 private:
     Window() = default;
 
@@ -173,4 +172,6 @@ private:
     static SDL_Event sEvent;
     static Logger sLogger;
     static bool sMinimized;
+    static bool sMouseGrabbed;
+    static const bool* sKeyStates;
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SDL3/SDL_filesystem.h>
 // Makes sure to remove constructors for structs.
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
@@ -11,12 +12,16 @@ class App final {
 public:
     static void Run();
 
-    static constexpr void Close() noexcept {
+    static VXL_INLINE void Close() noexcept {
         sRunning = false;
     }
 
-    static constexpr const float DeltaTime() noexcept {
+    static VXL_INLINE const float DeltaTime() noexcept {
         return sDeltaTime;
+    }
+
+    static VXL_INLINE std::string GetRootPath() {
+        return std::string(SDL_GetBasePath());
     }
 private:
     static bool sRunning;

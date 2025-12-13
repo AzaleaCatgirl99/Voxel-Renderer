@@ -15,12 +15,15 @@ set(CMAKE_CXX_STANDARD 23)
 # Compile option needed for Highway SIMD
 add_compile_options(-march=native)
 
+# Main project name
+set(VXL_TARGET_NAME Voxel-Renderer)
+
 # Default settings for the program
 set(VXL_VERBOSE_LOGGING ON)
 set(VXL_INFO_LOGGING ON)
 set(VXL_WARNING_LOGGING ON)
 set(VXL_ERROR_LOGGING ON)
-set(VXL_PROJECT_NAME "Voxel Renderer")
+set(VXL_TEST OFF)
 
 # Directories used by the program
 set(VXL_TOOLS_DIR ${CMAKE_SOURCE_DIR}/tools)
@@ -52,6 +55,10 @@ if (VXL_ERROR_LOGGING)
     add_compile_definitions(VXL_ERROR_LOGGING=1)
 endif ()
 
+if (VXL_TEST)
+    add_compile_definitions(VXL_TEST=1)
+endif ()
+
 add_compile_definitions(VXL_PROJECT_NAME="Voxel Renderer")
 # A simple macro for inlining with constexpr
 add_compile_definitions("VXL_INLINE=inline constexpr")
@@ -76,12 +83,12 @@ set(IMGUI_SRC
 )
 
 # Main app executable
-add_executable(Voxel-Renderer ${SRC} ${IMGUI_SRC})
+add_executable(${VXL_TARGET_NAME} ${SRC} ${IMGUI_SRC})
 include_directories(src)
 include_directories(lib/imgui)
 
 # Custom definitions based on specific CMake settings
-target_compile_definitions(Voxel-Renderer PUBLIC
+target_compile_definitions(${VXL_TARGET_NAME} PRIVATE
     # Build type
     $<$<CONFIG:Debug>:VXL_DEBUG=1>
     $<$<CONFIG:RelWithDebInfo>:VXL_DEBUG=1>
@@ -93,22 +100,22 @@ target_compile_definitions(Voxel-Renderer PUBLIC
 
 # SDL3 for windowing
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
-target_link_libraries(Voxel-Renderer PRIVATE SDL3::SDL3)
+target_link_libraries(${VXL_TARGET_NAME} PRIVATE SDL3::SDL3)
 
 # Vulkan pipeline
 find_package(Vulkan REQUIRED COMPONENTS glslc)
-target_link_libraries(Voxel-Renderer PRIVATE Vulkan::Vulkan)
+target_link_libraries(${VXL_TARGET_NAME} PRIVATE Vulkan::Vulkan)
 
 # GLM for linear algebra
 add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
-target_link_libraries(Voxel-Renderer PRIVATE glm::glm-header-only)
+target_link_libraries(${VXL_TARGET_NAME} PRIVATE glm::glm-header-only)
 
 # Highway for SIMD
 add_subdirectory(lib/highway EXCLUDE_FROM_ALL)
-target_link_libraries(Voxel-Renderer PRIVATE hwy)
+target_link_libraries(${VXL_TARGET_NAME} PRIVATE hwy)
 
 # STB for imaging
-target_include_directories(Voxel-Renderer PRIVATE lib/stb)
+target_include_directories(${VXL_TARGET_NAME} PRIVATE lib/stb)
 
 # ========== Assets ==========
 
@@ -116,7 +123,7 @@ target_include_directories(Voxel-Renderer PRIVATE lib/stb)
 add_custom_target(CopyAssets
     COMMAND ${CMAKE_COMMAND} -P ${VXL_TOOLS_DIR}/assets.cmake
 )
-add_dependencies(Voxel-Renderer CopyAssets)
+add_dependencies(${VXL_TARGET_NAME} CopyAssets)
 
 # Gets the Slangc executable needed to convert Slang shader files
 set(SLANGC_EXE ${Vulkan_INCLUDE_DIR}/../bin/slangc)
@@ -131,7 +138,7 @@ foreach (SHADER ${SHADER_FILES})
     string(REPLACE ".slang" ".spv" COMPILED_SHADER ${SHADER_NAME})
     set(COMPILED_SHADER ${VXL_BUILD_SHADERS_DIR}/${COMPILED_SHADER})
 
-    add_custom_command(TARGET Voxel-Renderer POST_BUILD
+    add_custom_command(TARGET ${VXL_TARGET_NAME} POST_BUILD
         COMMAND ${SLANGC_EXE} ${SHADER} -target spirv -emit-spirv-via-glsl -emit-spirv-directly -o ${COMPILED_SHADER}
         COMMAND ${CMAKE_COMMAND} -E echo "-- Compiling Slang shader \'${SHADER_NAME}\'"
     )
