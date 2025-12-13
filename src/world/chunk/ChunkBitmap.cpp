@@ -12,56 +12,113 @@ HWY_BEFORE_NAMESPACE();
 namespace HWY_NAMESPACE {
 namespace hw = hwy::HWY_NAMESPACE;
 
+void AndImpl(uint32_t* bitmap, const uint32_t* otherBitmap) {
+    const hw::ScalableTag<uint32_t> u32Tag;
+    const uint32_t numLanes = hw::Lanes(u32Tag);
 
-void GreedyMeshBitmapImpl(uint32_t* bitmap, std::vector<uint32_t>& vertices) {
-    // const hw::ScalableTag<uint32_t> u32Tag;
-// const size_t numLanes = hw::Lanes(u32Tag);
-
-    // std::array<uint32_t, 32> slices;
-    // uint8_t* slicesPtr = reinterpret_cast<uint8_t*>(slices.data());
-
-    // const auto zero = hw::Zero(u32Tag);
-    // const uint32_t laneSize = 1024 / numLanes;
-    // const uint32_t lanesPerSlize = 1024 / 
-    // for (int i = 0; i < laneSize; i++) {
-    //     auto data = hw::Load(u32Tag, bitmap + (i / laneSize));
-    //     auto results = hw::Ne(data, zero);
-    //     hw::StoreMaskBits(u32Tag, results, slicesPtr + laneSize);
-    // }
-
-    int n = 0;
-    for (int x = 0; x < 32; x++) {
-        for (int y = 0; y < 32; y++) {
-
-            if (bitmap[(x << 5) | y] == 0)
-                continue;
-
-            uint16_t index = (x << 5) | y;
-            uint32_t bits = bitmap[index];
-
-            if (bits == 0)
-                continue;
-            
-            uint8_t z = std::countl_zero(bits);
-            uint8_t height = std::countl_one(bits << z);
-            uint8_t width;
-
-            uint32_t mask = bits & (~0 << (32 - z + height));
-            bitmap[index] ^= mask;
-
-            for (width = 1; width < (32 - x); width++) {
-                if ((bitmap[index + width] & mask) != mask)
-                    break;
-
-                bitmap[index + width] ^= mask;
-            }
-
-            vertices.push_back((height << 20) | (width << 15) | (x << 10) | (y << 5) | z);
-        }
+    for (uint32_t i = 0; i < 1024; i += numLanes) {
+        auto vec1 = hw::Load(u32Tag, bitmap + i);
+        auto vec2 = hw::Load(u32Tag, otherBitmap + i);
+        auto resultVec = hw::And(vec1, vec2);
+        hw::Store(resultVec, u32Tag, bitmap + i);
     }
 }
 
-void CullFrontBitsImpl(uint32_t* bitmap) {
+std::array<uint32_t, 32> GetActiveRows(uint32_t* bitmap) {
+    std::array<uint32_t, 32> activeRows;
+    const hw::CappedTag<uint32_t, 32> u32Tag;
+    const uint32_t numLanes = hw::Lanes(u32Tag);
+
+    const auto zero = hw::Zero(u32Tag);
+    for (uint32_t i = 0; i < 32; i++) {
+        uint32_t slice = 0;
+        for (uint32_t j = 0; j < 32; j += numLanes) {
+            auto data = hw::Load(u32Tag, bitmap + (i * 32) + j);
+            auto results = hw::Ne(data, zero);
+            uint32_t maskBits;
+            hw::StoreMaskBits(u32Tag, results, reinterpret_cast<uint8_t*>(&maskBits));
+            slice |= maskBits << j;
+        }
+        activeRows[i] = slice;
+    }
+
+    return activeRows;
+}
+
+uint32_t GetActiveSlices(std::array<uint32_t, 32>& activeRows) {
+    const hw::CappedTag<uint32_t, 32> u32Tag;
+    const uint32_t numLanes = hw::Lanes(u32Tag);
+
+    uint32_t activeSlices = 0;
+    const auto zero = hw::Zero(u32Tag);
+    for (uint32_t i = 0; i < 32; i += numLanes) {
+        auto data = hw::Load(u32Tag, activeRows.data() + i);
+        auto results = hw::Ne(data, zero);
+        uint32_t maskBits;
+        hw::StoreMaskBits(u32Tag, results, reinterpret_cast<uint8_t*>(&maskBits));
+        activeSlices |= maskBits << i;
+    }
+
+    return activeSlices;
+};
+
+// Potential future optimization: parallelize width expansion.
+template<AxisOrder order>
+void GreedyMeshBitmapImpl(uint32_t* bitmap, std::vector<uint32_t>& vertices) {
+    const hw::FixedTag<uint32_t, 4> u32Tag;
+    const uint32_t numLanes = hw::Lanes(u32Tag);
+
+    alignas(16) std::array<uint32_t, 32> activeRows = GetActiveRows(bitmap);
+    uint32_t activeSlices = GetActiveSlices(activeRows);
+
+    // alignas(16) std::array<uint32_t, 1025> endPoints = GetGreedyEnds(bitmap, activeSlices);
+
+    uint32_t code = 0;
+    while (activeSlices != 0) {
+        const uint32_t slice = std::countr_zero(activeSlices);
+        // const uint32_t slicePacked = slice << sliceShift;
+        while (activeRows[slice] != 0) {
+            const uint32_t row = std::countr_zero(activeRows[slice]);
+            // const uint32_t rowPacked = row << rowShift;
+            const uint32_t index = slice * 32 + row;
+            uint32_t bits = bitmap[index];
+
+            while (bits != 0) {
+
+                const uint32_t bottom = std::countr_zero(bits);
+                const uint32_t height = std::countr_one(bits >> bottom);
+                uint32_t width = 1;
+
+                const uint32_t mask = (uint32_t)((1ULL << height) - 1) << bottom;
+                bits ^= mask;
+
+                for (int i = 1; i < 32 - row; i++) {
+                    if ((bitmap[index + i] & mask) != mask)
+                        break;
+                    width++;
+                    bitmap[index + i] ^= mask;
+                }
+
+                if constexpr (order == AxisOrder::eXYZ)
+                    vertices.push_back(((height - 1) << 20) | ((width - 1) << 15) | (slice << 10) | (row << 5) | (bottom << 0));
+                else if constexpr (order == AxisOrder::eXZY)
+                    vertices.push_back(((height - 1) << 20) | ((width - 1) << 15) | (slice << 10) | (row << 0) | (bottom << 5));
+                else if constexpr (order == AxisOrder::eYXZ)
+                    vertices.push_back(((height - 1) << 20) | ((width - 1) << 15) | (slice << 5) | (row << 10) | (bottom << 0));
+                else if constexpr (order == AxisOrder::eYZX)
+                    vertices.push_back(((height - 1) << 20) | ((width - 1) << 15) | (slice << 5) | (row << 0) | (bottom << 10));
+                else if constexpr (order == AxisOrder::eZXY)
+                    vertices.push_back(((height - 1) << 20) | ((width - 1) << 15) | (slice << 0) | (row << 10) | (bottom << 5));
+                else if constexpr (order == AxisOrder::eZYX)
+                    vertices.push_back(((height - 1) << 20) | ((width - 1) << 15) | (slice << 0) | (row << 5) | (bottom << 10));
+            }
+            activeRows[slice] ^= 1U << row;
+        }
+        activeSlices ^= 1U << slice;
+    }
+}
+
+void CullLeastSigBitsImpl(uint32_t* bitmap) {
     const hw::ScalableTag<uint32_t> u32Tag;
     const size_t numLanes = hw::Lanes(u32Tag);
 
@@ -72,7 +129,7 @@ void CullFrontBitsImpl(uint32_t* bitmap) {
     }
 }
 
-void CullBackBitsImpl(uint32_t* bitmap) {
+void CullMostSigBitsImpl(uint32_t* bitmap) {
     const hw::ScalableTag<uint32_t> u32Tag;
     const size_t numLanes = hw::Lanes(u32Tag);
 
@@ -83,16 +140,16 @@ void CullBackBitsImpl(uint32_t* bitmap) {
     }
 }
 
-void constexpr SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
-    uint32_t t = ((b >> shift) ^ a) & mask;
-    a ^= t;
-    b ^= (t << shift);
+constexpr inline void SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
+    uint32_t t = ((a >> shift) ^ b) & mask;
+    b ^= t;
+    a ^= (t << shift);
 }
 
-void constexpr SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) {
-    uint64_t t = ((b >> shift) ^ a) & mask;
-    a ^= t;
-    b ^= (t << shift);
+constexpr inline void SwapBits64(uint64_t& a, uint64_t& b, uint64_t mask, uint64_t shift) {
+    uint64_t t = ((a >> shift) ^ b) & mask;
+    b ^= t;
+    a ^= (t << shift);
 }
 
 void InnerTranspose128Impl(uint32_t* bitmap) {
@@ -109,9 +166,9 @@ void InnerTranspose128Impl(uint32_t* bitmap) {
     const hw::Repartition<uint64_t, decltype(u32Tag)> u32Tou64;
     const hw::Repartition<uint32_t, decltype(u64Tag)> u64Tou32;
 
-    auto bitMask1 = hw::Set(u8Tag, 0x0F);
-    auto bitMask2 = hw::Set(u64Tag, 0x0000'0000'3333'3333ULL);
-    auto bitMask3 = hw::Set(u64Tag, 0x0000'0000'5555'5555ULL);
+    auto bitMask1 = hw::Set(u8Tag, 0xF0);
+    auto bitMask2 = hw::Set(u64Tag, 0x0000'0000'CCCC'CCCCULL); // 1100 12 -> C
+    auto bitMask3 = hw::Set(u64Tag, 0x0000'0000'AAAA'AAAAULL); // 1010 10 -> A
 
     constexpr int chunkSize = 4; // 4 was profiled to have the best performance.
     
@@ -133,38 +190,38 @@ void InnerTranspose128Impl(uint32_t* bitmap) {
             auto firstVec8 = hw::BitCast(u32Tou16, hw::Load(u32Tag, layerPtr + 28)); // 25-32.
 
             // Stage 1.   
-            auto secondVec1 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec5, firstVec1));
-            auto secondVec2 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec6, firstVec2));
-            auto secondVec3 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec7, firstVec3));
-            auto secondVec4 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec8, firstVec4));
-            auto secondVec5 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec5, firstVec1));
-            auto secondVec6 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec6, firstVec2));
-            auto secondVec7 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec7, firstVec3));
-            auto secondVec8 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec8, firstVec4));
+            auto secondVec1 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec1, firstVec5));
+            auto secondVec2 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec2, firstVec6));
+            auto secondVec3 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec3, firstVec7));
+            auto secondVec4 = hw::BitCast(u16Tou8, hw::InterleaveEven(u16Tag, firstVec4, firstVec8));
+            auto secondVec5 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec1, firstVec5));
+            auto secondVec6 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec2, firstVec6));
+            auto secondVec7 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec3, firstVec7));
+            auto secondVec8 = hw::BitCast(u16Tou8, hw::InterleaveOdd(u16Tag, firstVec4, firstVec8));
 
             // Stage 2.
-            auto thirdVec1 = hw::InterleaveOdd(u8Tag, secondVec3, secondVec1);
-            auto thirdVec2 = hw::InterleaveOdd(u8Tag, secondVec4, secondVec2);
-            auto thirdVec3 = hw::InterleaveEven(u8Tag, secondVec3, secondVec1); 
-            auto thirdVec4 = hw::InterleaveEven(u8Tag, secondVec4, secondVec2);
-            auto thirdVec5 = hw::InterleaveOdd(u8Tag, secondVec7, secondVec5);
-            auto thirdVec6 = hw::InterleaveOdd(u8Tag, secondVec8, secondVec6);
-            auto thirdVec7 = hw::InterleaveEven(u8Tag, secondVec7, secondVec5);
-            auto thirdVec8 = hw::InterleaveEven(u8Tag, secondVec8, secondVec6); 
+            auto thirdVec1 = hw::InterleaveEven(u8Tag, secondVec1, secondVec3);
+            auto thirdVec2 = hw::InterleaveEven(u8Tag, secondVec2, secondVec4);
+            auto thirdVec3 = hw::InterleaveOdd(u8Tag, secondVec1, secondVec3); 
+            auto thirdVec4 = hw::InterleaveOdd(u8Tag, secondVec2, secondVec4);
+            auto thirdVec5 = hw::InterleaveEven(u8Tag, secondVec5, secondVec7);
+            auto thirdVec6 = hw::InterleaveEven(u8Tag, secondVec6, secondVec8);
+            auto thirdVec7 = hw::InterleaveOdd(u8Tag, secondVec5, secondVec7);
+            auto thirdVec8 = hw::InterleaveOdd(u8Tag, secondVec6, secondVec8); 
 
             // Stage 3.
-            auto firstSwap1 = hw::And(hw::Xor(thirdVec1, hw::ShiftRight<4>(thirdVec2)), bitMask1);
+            auto firstSwap1 = hw::And(hw::Xor(thirdVec1, hw::ShiftLeft<4>(thirdVec2)), bitMask1);
             auto fourthVec1 = hw::Xor(thirdVec1, firstSwap1);
-            auto fourthVec2 = hw::Xor(thirdVec2, hw::ShiftLeft<4>(firstSwap1));
-            auto firstSwap2 = hw::And(hw::Xor(thirdVec3, hw::ShiftRight<4>(thirdVec4)), bitMask1);
+            auto fourthVec2 = hw::Xor(thirdVec2, hw::ShiftRight<4>(firstSwap1));
+            auto firstSwap2 = hw::And(hw::Xor(thirdVec3, hw::ShiftLeft<4>(thirdVec4)), bitMask1);
             auto fourthVec3 = hw::Xor(thirdVec3, firstSwap2);
-            auto fourthVec4 = hw::Xor(thirdVec4, hw::ShiftLeft<4>(firstSwap2));
-            auto firstSwap3 = hw::And(hw::Xor(thirdVec5, hw::ShiftRight<4>(thirdVec6)), bitMask1);
+            auto fourthVec4 = hw::Xor(thirdVec4, hw::ShiftRight<4>(firstSwap2));
+            auto firstSwap3 = hw::And(hw::Xor(thirdVec5, hw::ShiftLeft<4>(thirdVec6)), bitMask1);
             auto fourthVec5 = hw::Xor(thirdVec5, firstSwap3);
-            auto fourthVec6 = hw::Xor(thirdVec6, hw::ShiftLeft<4>(firstSwap3));
-            auto firstSwap4 = hw::And(hw::Xor(thirdVec7, hw::ShiftRight<4>(thirdVec8)), bitMask1);
+            auto fourthVec6 = hw::Xor(thirdVec6, hw::ShiftRight<4>(firstSwap3));
+            auto firstSwap4 = hw::And(hw::Xor(thirdVec7, hw::ShiftLeft<4>(thirdVec8)), bitMask1);
             auto fourthVec7 = hw::Xor(thirdVec7, firstSwap4);
-            auto fourthVec8 = hw::Xor(thirdVec8, hw::ShiftLeft<4>(firstSwap4));
+            auto fourthVec8 = hw::Xor(thirdVec8, hw::ShiftRight<4>(firstSwap4));
 
             // Store the results.
             hw::Store(hw::BitCast(u8Tou32, fourthVec1), u32Tag, layerPtr);
@@ -180,22 +237,20 @@ void InnerTranspose128Impl(uint32_t* bitmap) {
         // Pipeline Stage 4 for the chunk. SIMD more expensive.
         for (int layer = chunkStart; layer < chunkEnd; layer++) {
             uint64_t* slice64 = bitmap64 + layer * 16;
-            for (int i = 0; i < 16; i += 2) {
+            for (int i = 0; i < 16; i += 2)
                 SwapBits64(slice64[i], slice64[i + 1], 0x3333333333333333ULL, 2); // 00110011
-            }
         }
 
         // Pipeline Stage 5 for the chunk. SIMD more expensive.
         for (int layer = chunkStart; layer < chunkEnd; layer++) {
             uint32_t* slice32 = bitmap + layer * 32;
-            for (int i = 0; i < 32; i += 2) {
+            for (int i = 0; i < 32; i += 2)
                 SwapBits32(slice32[i], slice32[i+1], 0x55555555U, 1); // 0101
-            }
         }
     }
 }
 
-constexpr void TransposeFour128(uint32_t* bitmap) {
+void TransposeFour128(uint32_t* bitmap) {
     const hw::FixedTag<uint32_t, 4> u32Tag;
     const hw::FixedTag<uint64_t, 2> u64Tag;
 
@@ -223,7 +278,7 @@ constexpr void TransposeFour128(uint32_t* bitmap) {
     hw::Store(thirdVec4, u32Tag, bitmap + 96);
 }
 
-constexpr void SwapBlock128(uint32_t* source, uint32_t* destination) { 
+void SwapBlock128(uint32_t* source, uint32_t* destination) { 
     const hw::FixedTag<uint32_t, 4> u32Tag;
 
     auto srcVec1 = hw::Load(u32Tag, source);
@@ -273,40 +328,73 @@ HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
 
-void ChunkBitmap::GreedyMeshBitmap(std::vector<uint32_t>& vertices) {
-    HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl)(m_bitmap.data(), vertices);
-};
-
-ChunkBitmap& ChunkBitmap::CullFrontBits() {
-    HWY_STATIC_DISPATCH(CullFrontBitsImpl)(m_bitmap.data());
+ChunkBitmap& ChunkBitmap::And(const ChunkBitmap& otherBitmap) {
+    HWY_STATIC_DISPATCH(AndImpl)(m_bitmap.data(), otherBitmap.m_bitmap.data());
     return *this;
 }
 
-ChunkBitmap& ChunkBitmap::CullBackBits() {
-    HWY_STATIC_DISPATCH(CullBackBitsImpl)(m_bitmap.data());
+void ChunkBitmap::GreedyMeshBitmap(std::vector<uint32_t>& vertices) {
+    switch (m_axisOrder) {
+        case AxisOrder::eXYZ: return HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl<AxisOrder::eXYZ>)(m_bitmap.data(), vertices);
+        case AxisOrder::eXZY: return HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl<AxisOrder::eXZY>)(m_bitmap.data(), vertices);
+        case AxisOrder::eYXZ: return HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl<AxisOrder::eYXZ>)(m_bitmap.data(), vertices);
+        case AxisOrder::eYZX: return HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl<AxisOrder::eYZX>)(m_bitmap.data(), vertices);
+        case AxisOrder::eZXY: return HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl<AxisOrder::eZXY>)(m_bitmap.data(), vertices);
+        case AxisOrder::eZYX: return HWY_STATIC_DISPATCH(GreedyMeshBitmapImpl<AxisOrder::eZYX>)(m_bitmap.data(), vertices);
+    }
+};
+
+ChunkBitmap& ChunkBitmap::CullMostSigBits() {
+    HWY_STATIC_DISPATCH(CullMostSigBitsImpl)(m_bitmap.data());
+    return *this;
+}
+
+ChunkBitmap& ChunkBitmap::CullLeastSigBits() {
+    HWY_STATIC_DISPATCH(CullLeastSigBitsImpl)(m_bitmap.data());
     return *this;
 }
 
 ChunkBitmap& ChunkBitmap::InnerTranspose() {
     HWY_STATIC_DISPATCH(InnerTranspose128Impl)(m_bitmap.data());
+    UpdateAxisAfterInner();
     return *this;
 }
 
 ChunkBitmap& ChunkBitmap::OuterTranspose() {
     HWY_STATIC_DISPATCH(OuterTranspose128Impl)(m_bitmap.data());
+    UpdateAxisAfterOuter();
     return *this;
 }
 
 // ========== Scalar ==========
 
+std::array<AxisOrder, 6> ChunkBitmap::sAxisOrderAfterOuter = {
+    AxisOrder::eYXZ, // From eXYZ 
+    AxisOrder::eZXY, // From eXZY 
+    AxisOrder::eXYZ, // From eYXZ 
+    AxisOrder::eZYX, // From eYZX 
+    AxisOrder::eXZY, // From eZXY 
+    AxisOrder::eYZX  // From eZYX
+};
+
+std::array<AxisOrder, 6> ChunkBitmap::sAxisOrderAfterInner = {
+    AxisOrder::eXZY, // From eXYZ 
+    AxisOrder::eXYZ, // From eXZY 
+    AxisOrder::eYZX, // From eYXZ 
+    AxisOrder::eYXZ, // From eYZX 
+    AxisOrder::eZYX, // From eZXY 
+    AxisOrder::eZXY  // From eZYX
+};
+
 Logger ChunkBitmap::sLogger = Logger("ChunkBitmap");
 
-void ChunkBitmap::OuterTransposeNaive(ChunkBitmap& destinationMap) const {
+void ChunkBitmap::OuterTransposeNaive(ChunkBitmap& destinationMap) {
     for (uint8_t x = 0; x < 32; x++) {
         for (uint8_t y = 0; y < 32; y++) {
             destinationMap[(y << 5) | x] = m_bitmap[(x << 5) | y];
         }
     }
+    UpdateAxisAfterOuter();
 }
 
 void ChunkBitmap::OuterTransposeScalar() {
@@ -315,18 +403,20 @@ void ChunkBitmap::OuterTransposeScalar() {
             std::swap(m_bitmap[(y << 5) | x], m_bitmap[(x << 5) | y]);
         }
     }
+    UpdateAxisAfterOuter();
 }
 
-void ChunkBitmap::InnerTransposeNaive(ChunkBitmap& destinationMap) const {
+void ChunkBitmap::InnerTransposeNaive(ChunkBitmap& destinationMap) {
     destinationMap = {};
     for (int x = 0; x < 32; x++) {
         for (int y = 0; y < 32; y++) {
             for (int z = 0; z < 32; z++) {
-                uint8_t bit = (m_bitmap[x << 5 | y] >> (31 - z)) & 1u;
-                destinationMap[x << 5 | z] ^= bit << (31 - y);
+                uint8_t bit = (m_bitmap[x << 5 | y] >> z) & 1u;
+                destinationMap[x << 5 | z] ^= bit << y;
             }
         }
     }
+    UpdateAxisAfterInner();
 }
 
 void ChunkBitmap::InnerTransposeScalar() {
@@ -383,19 +473,14 @@ void ChunkBitmap::InnerTransposeScalar() {
             }
         }
     }
-}
-
-ChunkBitmap& ChunkBitmap::SwapOuterInnerAxes() {
-    InnerTranspose();
-    OuterTranspose();
-    return *this;
+    UpdateAxisAfterInner();
 }
 
 bool ChunkBitmap::TestInnerTransposes() const {
     ChunkBitmap naive;
     ChunkBitmap butterfly = Copy();
 
-    InnerTransposeNaive(naive);
+    (*this).Copy().InnerTransposeNaive(naive);
     butterfly.InnerTranspose();
 
     if (naive != butterfly) {
@@ -422,7 +507,7 @@ bool ChunkBitmap::TestOuterTransposes() const {
     ChunkBitmap naive;
     ChunkBitmap simd = Copy();
 
-    InnerTransposeNaive(naive);
+    (*this).Copy().InnerTransposeNaive(naive);
     simd.InnerTranspose();
 
     if (naive != simd) {

@@ -20,13 +20,13 @@ void GetSolidBitmapImpl(const uint8_t* blockData, const BlockTypes block, ChunkB
     auto typeVec = hw::Set(u8Tag, block);
     
     if (invert) {
-        for (int i = 0; i < 32768; i += numLanes) {
+        for (uint32_t i = 0; i < 32768; i += numLanes) {
             auto dataVec = hw::Load(u8Tag, blockData + i);
             auto resultMask = hw::Ne(dataVec, typeVec);
             hw::StoreMaskBits(u8Tag, resultMask, bitmapPtr + (i / 8));
         }
     } else {
-        for (int i = 0; i < 32768; i += numLanes) {
+        for (uint32_t i = 0; i < 32768; i += numLanes) {
             auto dataVec = hw::Load(u8Tag, blockData + i);
             auto resultMask = hw::Eq(dataVec, typeVec);
             hw::StoreMaskBits(u8Tag, resultMask, bitmapPtr + (i / 8));

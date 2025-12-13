@@ -16,14 +16,14 @@ float App::sDeltaTime = 0.0f;
 float App::sLastFrame = 0.0f;
 
 void App::Run() {
-    // Test();
+    Test();
 
-    Init();
+    // Init();
 
-    while (sRunning)
-        MainLoop();
+    // while (sRunning)
+    //     MainLoop();
 
-    Cleanup();
+    // Cleanup();
 }
 
 void App::Init() {

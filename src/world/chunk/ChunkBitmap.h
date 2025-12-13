@@ -5,29 +5,38 @@
 #include <vector>
 #include "util/Logger.h"
 
+enum AxisOrder : uint8_t {
+    eXYZ = 0,
+    eXZY = 1,
+    eYXZ = 2,
+    eYZX = 3,
+    eZXY = 4,
+    eZYX = 5
+};
+
 class ChunkBitmap final {
 public:
     ChunkBitmap() = default;
 
-    ChunkBitmap(const ChunkBitmap& otherBitmap) : m_bitmap(otherBitmap.m_bitmap) {};
+    ChunkBitmap(const ChunkBitmap& otherBitmap) : m_bitmap(otherBitmap.m_bitmap), m_axisOrder(otherBitmap.m_axisOrder) {};
 
     ChunkBitmap(const std::array<uint32_t, 1024>& otherBitmap) : m_bitmap(otherBitmap) {};
 
     void GreedyMeshBitmap(std::vector<uint32_t>& vertices);
     
-    ChunkBitmap& CullBackBits();
+    ChunkBitmap& CullMostSigBits();
 
-    ChunkBitmap& CullFrontBits();
+    ChunkBitmap& CullLeastSigBits();
 
     ChunkBitmap& OuterTranspose();
 
-    void OuterTransposeNaive(ChunkBitmap& newMap) const;
+    void OuterTransposeNaive(ChunkBitmap& newMap);
 
     void OuterTransposeScalar();
 
     ChunkBitmap& InnerTranspose();
 
-    void InnerTransposeNaive(ChunkBitmap& newMap) const;
+    void InnerTransposeNaive(ChunkBitmap& newMap);
 
     void InnerTransposeScalar();
 
@@ -38,10 +47,9 @@ public:
     void LogInnerSlice(uint8_t layer = 0) const;
 
     void LogOuterSlice(uint8_t layer = 0) const;
-    
-    // Shorthand for an inner followed by outer transposition.
-    ChunkBitmap& SwapOuterInnerAxes();
 
+    ChunkBitmap& And(const ChunkBitmap& otherMap);
+    
     VXL_INLINE uint32_t* Data() noexcept {
         return m_bitmap.data();
     }
@@ -62,6 +70,17 @@ public:
 private:
     static Logger sLogger;
 
+    static std::array<AxisOrder, 6> sAxisOrderAfterOuter;
+    static std::array<AxisOrder, 6> sAxisOrderAfterInner;
+
+    VXL_INLINE void UpdateAxisAfterOuter() {
+        m_axisOrder = sAxisOrderAfterOuter[m_axisOrder];
+    }
+
+    VXL_INLINE void UpdateAxisAfterInner() {
+        m_axisOrder = sAxisOrderAfterInner[m_axisOrder];
+    }
+
     static void VXL_INLINE SwapBits32(uint32_t& a, uint32_t& b, uint32_t mask, uint32_t shift) {
         uint32_t t = ((b >> shift) ^ a) & mask;
         a ^= t;
@@ -75,4 +94,6 @@ private:
     }
 
     alignas(16) std::array<uint32_t, 1024> m_bitmap;
+
+    AxisOrder m_axisOrder;
 };

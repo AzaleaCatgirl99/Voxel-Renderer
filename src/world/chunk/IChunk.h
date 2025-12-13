@@ -22,7 +22,7 @@ public:
 
     ChunkMesh::Naive MeshNaive();
 
-    ChunkMesh::Greedy MeshGreedy();
+    void MeshGreedy(ChunkMesh::Greedy& mesh);
 
     void GreedyMeshBitmap(std::vector<uint32_t>& vertices, std::array<uint32_t, 1024>& bitmap, int normal) const;
 // protected:
