@@ -1,6 +1,5 @@
 #pragma once
 
-#include "util/data/Std140Calc.h"
 #include "util/display/RenderSystem.h"
 #include <glm/glm.hpp>
 // Makes sure to remove constructors for structs.
@@ -22,14 +21,11 @@ public:
     static void Destroy();
     static void Draw(vk::CommandBuffer& buffer, const Settings& settings);
 private:
-    struct ModelData {
-        glm::mat4 m_model;
-        glm::mat4 m_view;
-        glm::mat4 m_proj;
+    struct SceneParams {
+        glm::mat4 mvp;
     };
 
     static const VertexFormat sVertexFormat;
-    static constexpr const uint32_t sUniformSize = Std140Calc().PutMat4().PutMat4().PutMat4().Get();
     static RenderSystem::Pipeline sPipeline;
     static vk::DescriptorPool sDescPool;
     static vk::DescriptorSet sDescSets[RenderSystem::MAX_FRAMES_IN_FLIGHT];

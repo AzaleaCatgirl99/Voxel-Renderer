@@ -91,7 +91,6 @@ public:
             sDevice.destroyPipelineLayout(layout);
         }
 
-
         vk::Pipeline pipeline;
         vk::PipelineLayout layout;
         vk::DescriptorSetLayout descriptorSetLayout;

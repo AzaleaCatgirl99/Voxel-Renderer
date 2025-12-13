@@ -23,7 +23,7 @@ vk::DeviceMemory CubeRenderer::sIBOMemory;
 RenderSystem::UBO CubeRenderer::sUBO;
 
 void CubeRenderer::Initialize() {
-    sUBO = RenderSystem::CreateUniformBuffer(sUniformSize);
+    sUBO = RenderSystem::CreateUniformBuffer(sizeof(SceneParams));
 
     vk::DynamicState states[2] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
 
@@ -36,8 +36,8 @@ void CubeRenderer::Initialize() {
     };
 
     RenderSystem::Pipeline::Info info = {
-        .vertexShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test_vert.spv",
-        .fragmentShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test_frag.spv",
+        .vertexShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test.spv",
+        .fragmentShaderPath = std::string(SDL_GetBasePath()) + "assets/shaders/test.spv",
         .topology = vk::PrimitiveTopology::eTriangleList,
         .blending = true,
         .colorSrcFactor = vk::BlendFactor::eOne,
@@ -71,7 +71,7 @@ void CubeRenderer::Initialize() {
         bufferInfos[i] = {
             .buffer = sUBO.buffers[i],
             .offset = 0,
-            .range = sUniformSize
+            .range = sizeof(SceneParams)
         };
 
         descriptorWrites[i] = {
@@ -187,13 +187,11 @@ void CubeRenderer::Draw(vk::CommandBuffer& buffer, const Settings& settings) {
     model = glm::scale(model, settings.m_scale);
     model[1][1] *= -1;
 
-    ModelData data = {
-        .m_model = model,
-        .m_view = Camera::GetView(),
-        .m_proj = Camera::GetProj()
+    SceneParams params = {
+        .mvp = Camera::GetProj() * Camera::GetView() * model
     };
 
-    sUBO.Update(&data);
+    sUBO.Update(&params);
 
     buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, sPipeline.layout, 0, 1, &sDescSets[RenderSystem::GetCurrentFrame()], 0, VK_NULL_HANDLE);
     buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, sPipeline);

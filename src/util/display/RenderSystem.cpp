@@ -116,17 +116,16 @@ void RenderSystem::RecreateSwapchain() {
 }
 
 void RenderSystem::UpdateDisplay() {
-    vk::Result result = sDevice.waitForFences(1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
+    vk::Result result0 = sDevice.waitForFences(1, &sInFlightFences[sCurrentFrame], VK_TRUE, UINT64_MAX);
+    VkResultHandler::CheckResult(result0, "Failed to wait for in flight fence!");
 
-    auto index = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, UINT64_MAX, sImageAvailableSemaphores[sCurrentFrame]);
+    auto [result, imageIndex] = sDevice.acquireNextImageKHR(SwapchainHandler::sSwapchain, UINT64_MAX, sImageAvailableSemaphores[sCurrentFrame]);
     if (result == vk::Result::eErrorOutOfDateKHR) {
         RecreateSwapchain();
         return;
     } else {
-        VkResultHandler::CheckResult(index.result, "Failed to get image index!");
+        VkResultHandler::CheckResult(result, "Failed to get image index!");
     }
-
-    uint32_t imageIndex = index.value;
 
     result = sDevice.resetFences(1, &sInFlightFences[sCurrentFrame]);
     VkResultHandler::CheckResult(result, "Failed to reset in flight fence!");
@@ -323,13 +322,13 @@ RenderSystem::Pipeline RenderSystem::CreatePipeline(Pipeline::Info& info) {
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo = {
         .stage = vk::ShaderStageFlagBits::eVertex,
         .module = vertShaderModule,
-        .pName = "main"
+        .pName = "VertexMain"
     };
-    
+
     vk::PipelineShaderStageCreateInfo fragShaderStageInfo = {
         .stage = vk::ShaderStageFlagBits::eFragment,
         .module = fragShaderModule,
-        .pName = "main"
+        .pName = "PixelMain"
     };
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
@@ -515,7 +514,7 @@ void RenderSystem::CreateInstance() {
         .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
         .pEngineName = "RenderSystem",
         .engineVersion = VK_MAKE_VERSION(0, 1, 0),
-        .apiVersion = vk::ApiVersion10
+        .apiVersion = vk::ApiVersion14
     };
 
     vk::InstanceCreateInfo info = {
@@ -546,10 +545,10 @@ std::vector<const char*> RenderSystem::GetRequiredExtensions() {
     std::vector<const char*> extensions = std::vector<const char*>(sdlExtensions, sdlExtensions + sdlExtensionCount);
 
     // Add support for Apple devices.
-    #ifdef SDL_PLATFORM_APPLE
+#ifdef SDL_PLATFORM_APPLE
     extensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
     extensions.emplace_back("VK_KHR_get_physical_device_properties2");
-    #endif
+#endif
 
 #ifdef VXL_DEBUG
     // Add extension for validation layer message callback.
