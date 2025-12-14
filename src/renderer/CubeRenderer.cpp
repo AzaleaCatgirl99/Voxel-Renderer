@@ -34,19 +34,19 @@ void CubeRenderer::Initialize() {
         .stageFlags = vk::ShaderStageFlagBits::eVertex
     };
 
-    vk::ShaderModule shader = RenderSystem::CreateShader(App::GetRootPath() + "assets/shaders/test.spv");
+    vk::ShaderModule shader = RenderSystem::CreateShader(App::GetShadersDir() + "/test.spv");
     vk::PipelineShaderStageCreateInfo shaderStages[2];
 
     shaderStages[0] = {
         .stage = vk::ShaderStageFlagBits::eVertex,
         .module = shader,
-        .pName = "VertexMain"
+        .pName = "VSMain"
     };
 
     shaderStages[1] = {
         .stage = vk::ShaderStageFlagBits::eFragment,
         .module = shader,
-        .pName = "PixelMain"
+        .pName = "PSMain"
     };
 
     RenderSystem::Pipeline::Info info = {
@@ -149,7 +149,7 @@ void CubeRenderer::Initialize() {
         begin, begin, end,     1.0f, 0.0f, 1.0f, 1.0f
     };
 
-    RenderSystem::AllocateStagedMemory(sVBO, sVBOMemory, vertices, 168 * sizeof(float));
+    RenderSystem::AllocateStagedBufferMemory(sVBO, sVBOMemory, vertices, 168 * sizeof(float));
 
     uint16_t indices[36] = {
         // Front face
@@ -177,7 +177,7 @@ void CubeRenderer::Initialize() {
         22, 23, 20
     };
 
-    RenderSystem::AllocateStagedMemory(sIBO, sIBOMemory, indices, 36 * sizeof(uint16_t));
+    RenderSystem::AllocateStagedBufferMemory(sIBO, sIBOMemory, indices, 36 * sizeof(uint16_t));
 }
 
 void CubeRenderer::Destroy() {

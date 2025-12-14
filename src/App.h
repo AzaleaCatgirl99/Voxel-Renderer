@@ -20,8 +20,12 @@ public:
         return sDeltaTime;
     }
 
-    static VXL_INLINE std::string GetRootPath() {
+    static VXL_INLINE std::string GetRootDir() {
         return std::string(SDL_GetBasePath());
+    }
+
+    static VXL_INLINE std::string GetShadersDir() {
+        return std::string(SDL_GetBasePath()) + "assets/shaders";
     }
 private:
     static bool sRunning;

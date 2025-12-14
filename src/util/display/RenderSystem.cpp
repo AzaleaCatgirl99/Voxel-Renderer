@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "util/BufferedImage.h"
 #include "util/display/device/GPUDevice.h"
 #include "util/display/device/SwapchainHandler.h"
 #include "util/display/Window.h"
@@ -241,7 +242,7 @@ vk::DeviceMemory RenderSystem::CreateMemory(vk::Buffer& buffer, vk::MemoryProper
     return memory;
 }
 
-void RenderSystem::AllocateStagedMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size) {
+void RenderSystem::AllocateStagedBufferMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size) {
     // A staging buffer is needed in order to move over the data to the GPU.
     vk::Buffer stagingBuffer = CreateBuffer(
         sGPU.GetQueueFamilies()->IsSame() ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent,
@@ -252,8 +253,8 @@ void RenderSystem::AllocateStagedMemory(vk::Buffer& buffer, vk::DeviceMemory& me
     AllocateMemory(stagingMemory, data, size);
     CopyBuffer(buffer, stagingBuffer, size);
 
-    sDevice.freeMemory(stagingMemory);
-    sDevice.destroyBuffer(stagingBuffer);
+    FreeMemory(stagingMemory);
+    DestroyBuffer(stagingBuffer);
 }
 
 void RenderSystem::CopyBuffer(vk::Buffer& dst, vk::Buffer& src, vk::DeviceSize size, vk::DeviceSize src_offset, vk::DeviceSize dst_offset) {
@@ -281,6 +282,48 @@ void RenderSystem::CreateDescriptorSets(vk::DescriptorSet* sets, uint32_t count,
     auto vec = sDevice.allocateDescriptorSets(info);
     for (uint32_t i = 0; i < count; i++)
         sets[i] = vec[i];
+}
+
+vk::DeviceMemory RenderSystem::CreateImageMemory(vk::Image& image, vk::MemoryPropertyFlags properties, bool bind) {
+    vk::MemoryRequirements memoryRequirements = sDevice.getImageMemoryRequirements(image);
+
+    vk::MemoryAllocateInfo info = {
+        .allocationSize = memoryRequirements.size,
+        .memoryTypeIndex = sGPU.FindMemoryType(memoryRequirements.memoryTypeBits, properties)
+    };
+
+    vk::DeviceMemory memory = sDevice.allocateMemory(info);
+    if (bind)
+        BindImageMemory(image, memory);
+
+    return memory;
+}
+
+void RenderSystem::AllocateImageMemory(vk::Image& image, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size) {
+    // A staging buffer is needed in order to move over the data to the GPU.
+    vk::Buffer stagingBuffer = CreateBuffer(
+        sGPU.GetQueueFamilies()->IsSame() ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent,
+        size, {}, vk::BufferUsageFlagBits::eTransferSrc);
+    vk::DeviceMemory stagingMemory = CreateMemory(stagingBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    AllocateMemory(stagingMemory, data, size);
+    CopyBufferToImage(image, stagingBuffer, size);
+
+    FreeMemory(stagingMemory);
+    DestroyBuffer(stagingBuffer);
+}
+
+void RenderSystem::AllocateImageMemory(vk::Image& image, vk::DeviceMemory& memory, BufferedImage& data) {
+    AllocateImageMemory(image, memory, data.GetPixels(), data.GetTotalSize());
+}
+
+void RenderSystem::CopyBufferToImage(vk::Image& dst, vk::Buffer& src, vk::DeviceSize size, vk::DeviceSize src_offset, vk::DeviceSize dst_offset) {
+
+}
+
+void RenderSystem::TransitionImageLayout(vk::Image& image, vk::ImageLayout cis, vk::ImageLayout trans) {
+
 }
 
 void RenderSystem::CreateInstance() {

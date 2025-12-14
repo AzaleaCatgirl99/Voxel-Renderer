@@ -6,6 +6,7 @@
 #include "util/display/vulkan/VkConversions.h"
 #include "util/display/vulkan/VkInitializer.h"
 #include "util/display/vulkan/VkStructs.h"
+#include "vulkan/vulkan.hpp"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,8 @@
 #include "util/Logger.h"
 #include "util/display/device/GPUDevice.h"
 #include <vector>
+
+class BufferedImage;
 
 // Rendering implementation that uses Vulkan.
 // TODO add anisotropic filtering check
@@ -63,7 +66,7 @@ public:
 
     static UBO CreateUniformBuffer(vk::DeviceSize size);
     static vk::DeviceMemory CreateMemory(vk::Buffer& buffer, vk::MemoryPropertyFlags properties, bool bind = true);
-    static void AllocateStagedMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size);
+    static void AllocateStagedBufferMemory(vk::Buffer& buffer, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size);
     static void CopyBuffer(vk::Buffer& dst, vk::Buffer& src, vk::DeviceSize size, vk::DeviceSize src_offset = 0, vk::DeviceSize dst_offset = 0);
 
     static VXL_INLINE vk::Buffer CreateBuffer(vk::SharingMode mode, uint32_t size, vk::BufferCreateFlags flags, vk::BufferUsageFlags usages) {
@@ -180,6 +183,60 @@ public:
 
         sDevice.destroyPipeline(pipeline.pipeline);
         sDevice.destroyPipelineLayout(pipeline.layout);
+    }
+
+    // ========== Images & Textures ==========
+
+    static vk::DeviceMemory CreateImageMemory(vk::Image& image, vk::MemoryPropertyFlags properties, bool bind = true);
+    static void AllocateImageMemory(vk::Image& image, vk::DeviceMemory& memory, const void* data, vk::DeviceSize size);
+    static void AllocateImageMemory(vk::Image& image, vk::DeviceMemory& memory, BufferedImage& data);
+    static void CopyBufferToImage(vk::Image& dst, vk::Buffer& src, vk::DeviceSize size, vk::DeviceSize src_offset = 0, vk::DeviceSize dst_offset = 0);
+    // "Trans"ition :hehe: - AzaleaCatgirl99
+    static void TransitionImageLayout(vk::Image& image, vk::ImageLayout cis, vk::ImageLayout trans);
+
+    static VXL_INLINE vk::Image CreateImage(vk::ImageType type, uint32_t level, uint32_t width, uint32_t height,
+                                            uint32_t depth, uint32_t layers, vk::ImageUsageFlags usage,
+                                            vk::ImageTiling tiling = vk::ImageTiling::eOptimal,
+                                            vk::Format format = vk::Format::eR32G32B32A32Uint) {
+        return sDevice.createImage({
+            .imageType = type,
+            .format = format,
+            .extent = {
+                .width = width,
+                .height = height,
+                .depth = depth
+            },
+            .mipLevels = level + 1,
+            .arrayLayers = layers,
+            .samples = vk::SampleCountFlagBits::e1,
+            .tiling = tiling,
+            .usage = usage,
+            .sharingMode = sGPU.GetQueueFamilies()->IsSame() ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent
+        });
+    }
+
+    static VXL_INLINE vk::Image CreateImage2D(uint32_t level, uint32_t width, uint32_t height, vk::ImageUsageFlags usage,
+                                                vk::Format format = vk::Format::eR32G32B32A32Uint) {
+        return CreateImage(vk::ImageType::e2D, level, width, height, 1, 1, usage);
+    }
+
+    static VXL_INLINE vk::Image CreateImage2DArray(uint32_t level, uint32_t width, uint32_t height, uint32_t layers,
+                                                    vk::ImageUsageFlags usage, vk::Format format = vk::Format::eR32G32B32A32Uint) {
+        return CreateImage(vk::ImageType::e2D, level, width, height, 1, layers, usage);
+    }
+
+    static VXL_INLINE vk::Image CreateImage3D(uint32_t level, uint32_t width, uint32_t height, uint32_t depth,
+                                                vk::ImageUsageFlags usage, vk::Format format = vk::Format::eR32G32B32A32Uint) {
+        return CreateImage(vk::ImageType::e3D, level, width, height, depth, 1, usage);
+    }
+
+    static VXL_INLINE vk::Image CreateImage3DArray(uint32_t level, uint32_t width, uint32_t height, uint32_t depth, uint32_t layers,
+                                                vk::ImageUsageFlags usage, vk::Format format = vk::Format::eR32G32B32A32Uint) {
+        return CreateImage(vk::ImageType::e3D, level, width, height, depth, layers, usage);
+    }
+
+    static VXL_INLINE void BindImageMemory(vk::Image& image, vk::DeviceMemory& memory, vk::DeviceSize offset = 0) {
+        sDevice.bindImageMemory(image, memory, offset);
     }
 
     // ========== Getters & Setters ==========

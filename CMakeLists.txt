@@ -103,7 +103,7 @@ find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
 target_link_libraries(${VXL_TARGET_NAME} PRIVATE SDL3::SDL3)
 
 # Vulkan pipeline
-find_package(Vulkan REQUIRED COMPONENTS glslc)
+find_package(Vulkan REQUIRED)
 target_link_libraries(${VXL_TARGET_NAME} PRIVATE Vulkan::Vulkan)
 
 # GLM for linear algebra
@@ -125,9 +125,6 @@ add_custom_target(CopyAssets
 )
 add_dependencies(${VXL_TARGET_NAME} CopyAssets)
 
-# Gets the Slangc executable needed to convert Slang shader files
-set(SLANGC_EXE ${Vulkan_INCLUDE_DIR}/../bin/slangc)
-
 # Compile shaders to Vulkan's binary format (SPIRV-V)
 file(GLOB_RECURSE SHADER_FILES ${VXL_SHADERS_DIR}/*.slang)
 foreach (SHADER ${SHADER_FILES})
@@ -139,7 +136,7 @@ foreach (SHADER ${SHADER_FILES})
     set(COMPILED_SHADER ${VXL_BUILD_SHADERS_DIR}/${COMPILED_SHADER})
 
     add_custom_command(TARGET ${VXL_TARGET_NAME} POST_BUILD
-        COMMAND ${SLANGC_EXE} ${SHADER} -target spirv -emit-spirv-via-glsl -emit-spirv-directly -o ${COMPILED_SHADER}
+        COMMAND slangc ${SHADER} -target spirv -emit-spirv-via-glsl -emit-spirv-directly -o ${COMPILED_SHADER}
         COMMAND ${CMAKE_COMMAND} -E echo "-- Compiling Slang shader \'${SHADER_NAME}\'"
     )
 endforeach ()

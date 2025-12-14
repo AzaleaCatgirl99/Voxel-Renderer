@@ -17,7 +17,7 @@ struct VSOutput {
 };
 
 [shader("vertex")]
-VSOutput VertexMain(VSInput input) {
+VSOutput VSMain(VSInput input) {
     return {
         mul(SceneParams.mvp, float4(input.position, 1.0)),
         input.color
@@ -25,6 +25,6 @@ VSOutput VertexMain(VSInput input) {
 }
 
 [shader("pixel")]
-float4 PixelMain(VSOutput vertex) {
+float4 PSMain(VSOutput vertex) {
     return vertex.color;
 }
